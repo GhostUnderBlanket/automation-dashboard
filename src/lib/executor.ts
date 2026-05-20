@@ -444,7 +444,8 @@ export function runFlow(
         const branch = evalCondition(node, results, parents) ? 'true' : 'false';
         liveBranches.set(node.id, branch);
         cbs.onLog(`   ↳ ${branch === 'true' ? '✓ true branch' : '✗ false branch'}`, branch === 'true' ? 'success' : 'warn');
-        results.set(node.id, { id: node.id, label, stdout: branch, exitCode: 0 });
+        const condUpstream = parents.map(pid => results.get(pid)?.stdout?.trim() ?? '').filter(Boolean).join('\n');
+        results.set(node.id, { id: node.id, label, stdout: condUpstream, exitCode: 0 });
         cbs.onNodeDone(node.id, 0);
         continue;
       }
