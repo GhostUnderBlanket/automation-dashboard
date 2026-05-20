@@ -1,10 +1,8 @@
 import { create } from 'zustand';
 import type { Flow } from '../types/flow';
 import {
-  loadFlows, saveFlow, saveFlowNow, deleteFlowFile,
-  isFlowsSeeded, markFlowsSeeded,
+  loadFlows, saveFlow, deleteFlowFile,
 } from '../lib/flowPersistence';
-import { SEED_FLOWS } from './seedFlows';
 
 interface FlowStore {
   flows:            Flow[];
@@ -77,17 +75,10 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     if (get().loaded) return;
     try {
       const onDisk = await loadFlows();
-      const seeded = await isFlowsSeeded();
-      if (!seeded && onDisk.length === 0) {
-        for (const f of SEED_FLOWS) await saveFlowNow(f);
-        await markFlowsSeeded();
-        set({ flows: SEED_FLOWS, loaded: true });
-        return;
-      }
       set({ flows: onDisk, loaded: true });
     } catch (e) {
-      console.error('[flowStore] bootstrap failed; falling back to in-memory seed:', e);
-      set({ flows: SEED_FLOWS, loaded: true });
+      console.error('[flowStore] bootstrap failed:', e);
+      set({ flows: [], loaded: true });
     }
   },
 

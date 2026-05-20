@@ -15,7 +15,7 @@ import {
 } from '@xyflow/react';
 import {
   ArrowLeft, Plus, Save, Play, Square, Undo2, Redo2,
-  Timer, Globe, Terminal, GitBranch, ChevronDown, X,
+  Timer, Globe, Terminal, GitBranch, ChevronDown,
   ZoomIn, ZoomOut, Maximize2, FolderOpen, ExternalLink, Repeat2,
   FileText, Braces,
 } from 'lucide-react';

@@ -67,15 +67,6 @@ function migrateLegacyNodes(flow: Flow): Flow {
   return { ...flow, nodes };
 }
 
-export async function isFlowsSeeded(): Promise<boolean> {
-  try { return await invoke<boolean>('flows_seeded'); }
-  catch { return false; }
-}
-
-export async function markFlowsSeeded(): Promise<void> {
-  try { await invoke('mark_flows_seeded'); } catch { /* ignore */ }
-}
-
 export async function loadFlows(): Promise<Flow[]> {
   const texts = await invoke<string[]>('list_flow_files');
   const out: Flow[] = [];
