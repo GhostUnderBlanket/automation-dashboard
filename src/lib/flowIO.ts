@@ -1,4 +1,4 @@
-import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { open as openDialog, save as saveDialog, ask } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import type { Flow } from '../types/flow';
 
@@ -15,7 +15,11 @@ function safeFileName(name: string): string {
   return name.trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').replace(/^-+|-+$/g, '') || 'flow';
 }
 
-export async function exportFlow(flow: Flow): Promise<string | null> {
+export async function exportFlow(flow: Flow, includeVars?: boolean): Promise<string | null> {
+  const withVars = includeVars ?? await ask(
+    'Include flow variables in the export?',
+    { title: 'Export options', kind: 'info' },
+  );
   const target = await saveDialog({
     title:       `Export ${flow.name}`,
     defaultPath: `${safeFileName(flow.name)}.flow.json`,
@@ -27,7 +31,7 @@ export async function exportFlow(flow: Flow): Promise<string | null> {
     $schema:    'autoflow.flow',
     version:    FORMAT_VERSION,
     exportedAt: Date.now(),
-    flow,
+    flow:       withVars ? flow : { ...flow, variables: Object.fromEntries(Object.keys(flow.variables ?? {}).map(k => [k, ''])) },
   };
   await invoke<void>('write_text_file', {
     opts: { path: target, content: JSON.stringify(payload, null, 2) },

@@ -5,7 +5,7 @@ A lightweight desktop app for building and running visual automation flows — n
 ## What It Does
 
 - **Visual flow editor**: drag-and-drop node graph to wire up automation steps
-- **Node types**: Trigger (manual / cron), REST API node, Script (cmd/PowerShell/bash), Condition branch
+- **Node types**: Trigger (manual / cron), REST API, Script (cmd/PowerShell/bash), Condition, Loop, File, Open URL
 - **Flow variables**: key-value pairs defined on each flow, referenced with `${var:NAME}` in any field
 - **Flow tags**: tag flows for filtering on the home page
 - **Flow runner**: executes nodes in topological order, streams output in a live log panel
@@ -16,6 +16,7 @@ A lightweight desktop app for building and running visual automation flows — n
 - **In-app toasts**: completion toasts for all run types with direct log navigation
 - **Light / dark theme**: CSS-variable–based theme switching, stored in settings
 - **Auto-update**: `tauri-plugin-updater` checks GitHub Releases; manual check in Settings → About
+- **Launch at login**: `tauri-plugin-autostart` registers OS login entry (Windows registry)
 
 ## Tech Stack
 
@@ -34,6 +35,7 @@ A lightweight desktop app for building and running visual automation flows — n
 | Scheduler | **tokio-cron-scheduler** (Rust) | Cron-based flow triggers |
 | Notifications | **tauri-plugin-notification** | Desktop alerts for background runs |
 | Updates | **tauri-plugin-updater** | Auto-update from GitHub Releases |
+| Autostart | **tauri-plugin-autostart** | Launch at login |
 
 ## Project Structure
 
@@ -45,37 +47,43 @@ src/
   components/
     Sidebar.tsx         # Nav sidebar
     HomePage.tsx        # Flow cards, weather icon, arm/disarm, tags, multi-select, filters
-    FlowEditor.tsx      # @xyflow/react canvas + undo/redo + variables bar + tags bar + log panel
-    FlowVarsPanel.tsx   # Right panel: flow variable editor (shown when no node selected)
+    FlowEditor.tsx      # @xyflow/react canvas + undo/redo + panel controls + log panel
+    FlowVarsPanel.tsx   # Right panel: flow variable editor
+    InfoPanel.tsx       # Right panel: flow description + tags editor
     NodePanel.tsx       # Right panel: selected node config (with REST API test button)
     LogPanel.tsx        # Bottom panel: live execution output
     RunLogPage.tsx      # Run history, grouped by date, filterable, exportable
     SettingsPage.tsx    # Settings: Workspace / Window & Tray / REST API / Shell / Run Log / About
     ToastContainer.tsx  # Fixed bottom-right toast notifications
+    WelcomeScreen.tsx   # First-run onboarding: workspace picker + example flow import
     nodes/
       TriggerNode.tsx   # Schedule / manual trigger
       RestNode.tsx      # REST API node
       ScriptNode.tsx    # cmd / PowerShell / bash script
       ConditionNode.tsx # Branch on condition
+      LoopNode.tsx      # Repeat / retry / forEach loop controller
+      FileNode.tsx      # Read / write / append / exists on a local file
+      OpenUrlNode.tsx   # Opens URL in browser or path with default app
       BaseNode.tsx      # Shared node chrome + run-status ring
     ui/
       Select.tsx        # Dropdown select component
       RefField.tsx      # Text field with upstream ref + flow variable picker
   store/
-    flowStore.ts        # Zustand: flows, active flow, view, targetSessionId
+    flowStore.ts        # Zustand: flows, active flow, view, targetSessionId, duplicateFlow
     settingsStore.ts    # Persisted settings (localStorage)
     runLogStore.ts      # Run history (localStorage), configurable limit
     workspaceStore.ts   # Workspace path
     toastStore.ts       # In-memory toast queue
-    seedFlows.ts        # Default example flows
   lib/
-    executor.ts         # Topological sort + node execution (script + REST API)
+    executor.ts         # Topological sort + node execution (all node types)
     backgroundRunner.ts # Wraps runFlow for cron/catch-up/manual background runs + toasts
     cronService.ts      # Listens for flow-fire Tauri events, drives scheduler
     flowPersistence.ts  # Save/load flow JSON via tauri-plugin-fs
     flowIO.ts           # Import/export bundles (single + multi-flow JSON)
     graphRefs.ts        # Upstream node resolution for ${node-id} refs
-    interpolate.ts      # ${node-id} and ${var:NAME} interpolation engine
+    interpolate.ts      # Interpolation engine (node refs, var:, loop.item, loop.item.field)
+    exampleFlows.ts     # 16 example flow templates; imported via welcome screen or Settings
+    tagColor.ts         # Hash-based tag colour palette (shared across HomePage + InfoPanel)
   types/
     flow.ts             # Flow, Node, Edge TypeScript types (includes variables, tags)
     settings.ts         # AppSettings type + defaults
@@ -150,9 +158,18 @@ interface Flow {
 ## Node Configuration Shape
 
 ```ts
+type TriggerNodeData = {
+  label:    string;
+  mode:     'manual' | 'cron';
+  cron?:    string;     // 5-field; Rust normalises to 6-field for tokio-cron-scheduler
+  catchUp?: 'skip' | 'run-once' | 'run-all';
+  enabled?: boolean;    // arm/disarm — false means scheduler skips this flow
+};
+
 type RestNodeData = {
   label:          string;
   method:         'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  urlOverride?:   string;   // full URL; bypasses global base URL + endpoint when set
   endpoint:       string;
   bodyMode:       'form' | 'json';
   bodyRows:       { key: string; value: string }[];
@@ -167,21 +184,47 @@ type ScriptNodeData = {
   workDir?: string;
 };
 
-type TriggerNodeData = {
-  label:    string;
-  mode:     'manual' | 'cron';
-  cron?:    string;     // 5-field; Rust normalises to 6-field for tokio-cron-scheduler
-  catchUp?: 'skip' | 'run-once' | 'run-all';
-  enabled?: boolean;    // arm/disarm — false means scheduler skips this flow
-};
-
 type ConditionNodeData = {
   label:   string;
   source:  string;
   op:      'equals' | 'notEquals' | 'contains' | 'matches' | 'nonempty' | 'empty' | 'exitZero';
   value?:  string;
 };
+
+type LoopNodeData = {
+  label:      string;
+  mode:       'repeat' | 'retry' | 'forEach';
+  count?:     number;     // repeat / retry iterations (default 3)
+  delay?:     number;     // ms between iterations
+  separator?: 'newline' | 'json-array';  // forEach item split mode
+};
+
+type FileNodeData = {
+  label:      string;
+  operation:  'read' | 'write' | 'append' | 'exists';
+  path:       string;
+  content?:   string;   // write / append only
+};
+
+type OpenUrlNodeData = {
+  label: string;
+  url:   string;   // https:// → browser; anything else → default system app
+};
 ```
+
+## Interpolation Reference
+
+| Syntax | Resolves to |
+|---|---|
+| `${prev}` | stdout of the immediate upstream parent(s) |
+| `${prev.exit}` | exit code of the immediate upstream parent |
+| `${node-id}` | stdout of the named node (by id or label) |
+| `${node-id.exit}` | exit code of the named node |
+| `${node-id.field}` | JSON field extracted from a node's stdout |
+| `${var:NAME}` | flow-level variable (resolved before node refs) |
+| `${loop.item}` | current forEach loop item (whole value) |
+| `${loop.item.field}` | JSON field extracted from the current forEach loop item |
+| `${env.NAME}` | process environment variable |
 
 ## Key Constraints
 
@@ -189,14 +232,18 @@ type ConditionNodeData = {
 - **Shell scope** in `tauri.conf.json` → `plugins.shell.scope` controls which executables can run
 - **HTTP scope** in `capabilities/default.json` allows `https://**`
 - **Cron field format**: UI accepts 5-field cron; `normalize_cron()` in Rust prepends `0` seconds for 6-field `tokio-cron-scheduler`
-- **REST API base URL** configured globally in Settings → REST API; per-node `tokenOverride` overrides the global token
-- **`${node-id}` interpolation**: downstream nodes reference upstream stdout; `${prev}` = immediate parent
+- **REST API base URL** configured globally in Settings → REST API; per-node `urlOverride` bypasses it entirely; `tokenOverride` overrides the global token
+- **Loop body**: the Loop node runs only the single directly-connected node; it marks that node as `loopManaged` so the main executor skips it
+- **forEach JSON array**: upstream stdout is parsed as a JSON array; each element (stringified if object) becomes one `loop.item`; `${loop.item.field}` extracts fields from JSON object items
 - **`${var:NAME}` interpolation**: resolved from the flow's `variables` map before node refs
 - **Insert ref picker**: `raw` inserts `${var:NAME}` (correct for numbers/booleans/form fields); `"text"` inserts `"${var:NAME}"` (quoted JSON string)
 - **Theme**: `.light` class on `<html>` overrides CSS custom properties; applied via `useEffect` in `App.tsx`
 - **Run log limit**: configurable in Settings → Run Log (default 100, range 10–500)
 - **Auto-update signing key**: public key in `tauri.conf.json` (safe to commit); private key at `~/.tauri/autoflow.key` and as GitHub Actions secrets
 - **`createUpdaterArtifacts: true`** in `tauri.conf.json` — required for updater bundle generation
+- **Workspace path** stored in `<appData>/workspace.json` (machine-local); flows in `<workspace>/flows/*.json`
+- **Welcome screen** shown on first launch (no workspace set); step 1 picks directory, step 2 offers importing 16 example flows
+- **Example flows** live in `src/lib/exampleFlows.ts`; also importable any time via Settings → Workspace
 - Tailwind v4 via `@tailwindcss/vite` (no `tailwind.config.js`)
 - `@xyflow/react` requires: `import "@xyflow/react/dist/style.css"` in `main.tsx`
 - App identifier: `io.github.ghostunderblanket.autoflow` — changing resets user app data

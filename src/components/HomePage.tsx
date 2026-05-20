@@ -11,7 +11,9 @@ import { clsx } from 'clsx';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useFlowStore } from '../store/flowStore';
-import { exportFlow, importFlows } from '../lib/flowIO';
+import { exportFlow, importFlows, parseFlowsFile } from '../lib/flowIO';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { ask } from '@tauri-apps/plugin-dialog';
 import { fetchSchedulerState, type FlowJobState } from '../lib/cronService';
 import { runFlowInBackground } from '../lib/backgroundRunner';
 import type { Flow, NodeKind } from '../types/flow';
@@ -343,8 +345,13 @@ async function exportFlows(flows: Flow[], setError: (e: string | null) => void) 
   setError(null);
   if (flows.length === 0) return;
 
+  const includeVars = await ask(
+    'Include flow variables in the export?',
+    { title: 'Export options', kind: 'info' },
+  );
+
   if (flows.length === 1) {
-    try { await exportFlow(flows[0]); }
+    try { await exportFlow(flows[0], includeVars); }
     catch (e) { setError(`Export failed: ${String(e)}`); }
     return;
   }
@@ -357,12 +364,13 @@ async function exportFlows(flows: Flow[], setError: (e: string | null) => void) 
       filters:     [{ name: 'JSON', extensions: ['json'] }],
     });
     if (!target) return;
+    const processedFlows = includeVars ? flows : flows.map(f => ({ ...f, variables: Object.fromEntries(Object.keys(f.variables ?? {}).map(k => [k, ''])) }));
     const payload = JSON.stringify({
       $schema:    'autoflow.flows',
       version:    1,
       exportedAt: Date.now(),
-      count:      flows.length,
-      flows,
+      count:      processedFlows.length,
+      flows:      processedFlows,
     }, null, 2);
     await invoke('write_text_file', { opts: { path: target, content: payload } });
   } catch (e) {
@@ -376,6 +384,7 @@ export function HomePage() {
   const { flows, addFlow, updateFlow, setActiveFlow, setView, deleteFlow, duplicateFlow } = useFlowStore();
   const sessions = useRunLogStore(s => s.sessions);
   const [opError,      setOpError]    = useState<string | null>(null);
+  const [dragOver,     setDragOver]   = useState(false);
   const [schedules,    setSchedules]  = useState<Map<string, FlowJobState>>(new Map());
   const [selectedIds,  setSelected]   = useState<Set<string>>(new Set());
   const [search,         setSearch]        = useState('');
@@ -394,6 +403,37 @@ export function HomePage() {
     const id = setInterval(tick, 30_000);
     return () => { alive = false; clearInterval(id); };
   }, [flows]);
+
+  // Tauri drag-and-drop: listen for .flow.json files dropped onto the window.
+  useEffect(() => {
+    const win = getCurrentWebviewWindow();
+    let unlisten: (() => void) | undefined;
+    win.onDragDropEvent(async event => {
+      const p = event.payload as { type: string; paths?: string[] };
+      if (p.type === 'over' || p.type === 'enter') {
+        setDragOver(true);
+      } else if (p.type === 'cancel' || p.type === 'leave') {
+        setDragOver(false);
+      } else if (p.type === 'drop') {
+        setDragOver(false);
+        const jsonPaths = (p.paths ?? []).filter(path => path.toLowerCase().endsWith('.json'));
+        if (jsonPaths.length === 0) return;
+        setOpError(null);
+        let imported = 0;
+        for (const path of jsonPaths) {
+          try {
+            const text = await invoke<string>('read_text_file', { path });
+            const flows = parseFlowsFile(text);
+            for (const flow of flows) addFlow(flow);
+            imported += flows.length;
+          } catch { /* skip unreadable or invalid files */ }
+        }
+        if (imported === 0) setOpError('No valid flow files found in dropped files.');
+      }
+    }).then(fn => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Drop stale selections when flows are removed.
   useEffect(() => {
@@ -508,7 +548,16 @@ export function HomePage() {
   }
 
   return (
-    <div className="h-full flex flex-col dot-grid overflow-hidden">
+    <div className="h-full flex flex-col dot-grid overflow-hidden relative">
+
+      {dragOver && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none"
+             style={{ background: 'rgba(109,91,239,0.08)', border: '2px dashed rgba(109,91,239,0.5)' }}>
+          <Download size={32} className="text-accent mb-3" />
+          <p className="text-[14px] font-semibold text-ink">Drop to import flow</p>
+          <p className="text-[11.5px] text-ink-dim mt-1 font-mono">.flow.json files</p>
+        </div>
+      )}
 
       {/* Header */}
       <div

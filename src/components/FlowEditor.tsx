@@ -8,6 +8,9 @@ import {
   useNodesState,
   useEdgesState,
   addEdge,
+  getBezierPath,
+  BaseEdge,
+  type EdgeProps,
   type Node,
   type Edge,
   type Connection,
@@ -47,6 +50,49 @@ function edgeStyleFor(h: string | null | undefined) {
   if (h === 'true')  return { stroke: '#05c58c', strokeWidth: 1.5, strokeDasharray: '5 4' };
   return { stroke: '#2e2e3c', strokeWidth: 1.5 };
 }
+
+function DeletableEdge({
+  id, sourceX, sourceY, targetX, targetY,
+  sourcePosition, targetPosition, selected, style,
+}: EdgeProps) {
+  const { setEdges } = useReactFlow();
+  const [hovered, setHovered] = useState(false);
+  const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  const show = hovered || selected;
+
+  return (
+    <g
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Wider invisible hit area */}
+      <path d={edgePath} fill="none" stroke="transparent" strokeWidth={12} />
+      <BaseEdge path={edgePath} style={style ?? { stroke: '#2e2e3c', strokeWidth: 1.5 }} />
+      {show && (
+        <foreignObject
+          x={labelX - 9} y={labelY - 9} width={18} height={18}
+          style={{ overflow: 'visible' }}
+        >
+          <button
+            onClick={() => setEdges(es => es.filter(e => e.id !== id))}
+            style={{
+              width: 18, height: 18, borderRadius: '50%',
+              background: '#e84040', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: 1,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
+            }}
+            title="Disconnect edge"
+          >
+            ✕
+          </button>
+        </foreignObject>
+      )}
+    </g>
+  );
+}
+
+const EDGE_TYPES = { default: DeletableEdge };
 
 function toRFEdges(es: FlowEdge[]): Edge[] {
   return es.map(e => ({
@@ -310,10 +356,13 @@ function CanvasControls({ theme, rightPanel, onToggle }: {
 
 /* ─── FlowEditor ─────────────────────────────── */
 
-const DEFAULT_EDGE_OPTIONS = { style: { stroke: '#2e2e3c', strokeWidth: 1.5 } };
+const DEFAULT_EDGE_OPTIONS = {};
 
 export function FlowEditor() {
   const { flows, activeFlowId, setView, updateFlow } = useFlowStore();
+  const navRequest     = useFlowStore(s => s.navRequest);
+  const clearNavRequest= useFlowStore(s => s.clearNavRequest);
+  const setEditorDirty = useFlowStore(s => s.setEditorDirty);
   const flow = flows.find(f => f.id === activeFlowId);
   const theme = useSettingsStore(s => s.settings.theme);
   const canvasBg  = theme === 'light' ? '#f5f5fa' : '#111214';
@@ -335,6 +384,7 @@ export function FlowEditor() {
   const [isRunning,    setIsRunning]   = useState(false);
   const [isDirty,      setIsDirty]     = useState(false);
   const [showExitDlg,  setShowExitDlg] = useState(false);
+  const [exitTarget,   setExitTarget]  = useState<'home' | 'editor' | 'settings' | 'runlog'>('home');
   const [nodeStatuses, setNodeStatuses]= useState<Map<string, NodeStatus>>(new Map());
 
   // ── History ──────────────────────────────────────────────────────────────
@@ -430,6 +480,21 @@ export function FlowEditor() {
     bump();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Sync dirty state to store so Sidebar can read it ────────────────────
+  useEffect(() => { setEditorDirty(isDirty); }, [isDirty, setEditorDirty]);
+  useEffect(() => () => { setEditorDirty(false); }, [setEditorDirty]);
+
+  // ── Handle nav requests from Sidebar ─────────────────────────────────────
+  useEffect(() => {
+    if (!navRequest) return;
+    const target = navRequest;
+    setExitTarget(target);
+    clearNavRequest();
+    if (isDirty) { setShowExitDlg(true); }
+    else { setView(target); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navRequest]);
 
   // ── Keyboard shortcuts (registered once; always uses latest via refs) ────
   useEffect(() => {
@@ -614,9 +679,9 @@ export function FlowEditor() {
   }
   saveRef.current = handleSave;
 
-  function handleBack() { if (isDirty) setShowExitDlg(true); else setView('home'); }
-  function exitSave()   { handleSave(); setView('home'); }
-  function exitDiscard(){ setView('home'); }
+  function handleBack() { setExitTarget('home'); if (isDirty) setShowExitDlg(true); else setView('home'); }
+  function exitSave()   { handleSave(); setView(exitTarget); setShowExitDlg(false); }
+  function exitDiscard(){ setView(exitTarget); setShowExitDlg(false); }
   function exitCancel() { setShowExitDlg(false); }
 
   // ── Run ───────────────────────────────────────────────────────────────────
@@ -687,7 +752,7 @@ export function FlowEditor() {
             onEdgesChange={onEdgesChangeTracked}
             onConnect={onConnect}
             onNodeClick={onNodeClick} onPaneClick={handlePaneClick}
-            nodeTypes={nodeTypes} defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
+            nodeTypes={nodeTypes} edgeTypes={EDGE_TYPES} defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
             fitView fitViewOptions={{ padding: 0.4 }} minZoom={0.3} maxZoom={2} deleteKeyCode="Backspace"
           >
             <Background variant={BackgroundVariant.Dots} color={dotColor} bgColor={canvasBg} gap={22} size={1.2} />

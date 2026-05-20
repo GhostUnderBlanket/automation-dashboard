@@ -4,16 +4,24 @@ import {
   loadFlows, saveFlow, deleteFlowFile,
 } from '../lib/flowPersistence';
 
+type NavTarget = 'home' | 'editor' | 'settings' | 'runlog';
+
 interface FlowStore {
   flows:            Flow[];
   activeFlowId:     string | null;
-  view:             'home' | 'editor' | 'settings' | 'runlog';
+  view:             NavTarget;
   targetSessionId:  string | null;
-  /** True after the on-disk store has been read into memory. */
   loaded:           boolean;
+  /** True while FlowEditor has unsaved local changes. */
+  editorDirty:      boolean;
+  /** Set by Sidebar to request navigation away from editor while dirty. */
+  navRequest:       NavTarget | null;
   setActiveFlow:    (id: string | null) => void;
-  setView:          (view: 'home' | 'editor' | 'settings' | 'runlog') => void;
+  setView:          (view: NavTarget) => void;
   setTargetSession: (id: string | null) => void;
+  setEditorDirty:   (dirty: boolean) => void;
+  requestNav:       (target: NavTarget) => void;
+  clearNavRequest:  () => void;
   addFlow:       (flow: Flow) => void;
   deleteFlow:    (id: string) => void;
   updateFlow:    (id: string, patch: Partial<Flow>) => void;
@@ -28,10 +36,15 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
   view:            'home',
   targetSessionId: null,
   loaded:          false,
+  editorDirty:     false,
+  navRequest:      null,
 
-  setActiveFlow:    (id)   => set({ activeFlowId: id }),
-  setView:          (view) => set({ view }),
-  setTargetSession: (id)   => set({ targetSessionId: id }),
+  setActiveFlow:    (id)     => set({ activeFlowId: id }),
+  setView:          (view)   => set({ view }),
+  setTargetSession: (id)     => set({ targetSessionId: id }),
+  setEditorDirty:   (dirty)  => set({ editorDirty: dirty }),
+  requestNav:       (target) => set({ navRequest: target }),
+  clearNavRequest:  ()       => set({ navRequest: null }),
 
   addFlow: (flow) => {
     set((s) => ({ flows: [...s.flows, flow] }));

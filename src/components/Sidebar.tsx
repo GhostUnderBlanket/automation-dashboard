@@ -28,7 +28,18 @@ function NavItem({ icon, label, active, onClick }: NavItemProps) {
 }
 
 export function Sidebar() {
-  const { view, setView } = useFlowStore();
+  const view         = useFlowStore(s => s.view);
+  const editorDirty  = useFlowStore(s => s.editorDirty);
+  const setView      = useFlowStore(s => s.setView);
+  const requestNav   = useFlowStore(s => s.requestNav);
+
+  function navTo(target: 'home' | 'runlog' | 'settings') {
+    if (view === 'editor' && editorDirty && target !== 'settings') {
+      requestNav(target);
+    } else {
+      setView(target);
+    }
+  }
 
   return (
     <aside
@@ -55,13 +66,13 @@ export function Sidebar() {
           icon={<LayoutGrid size={15} />}
           label="Flows"
           active={view === 'home'}
-          onClick={() => setView('home')}
+          onClick={() => navTo('home')}
         />
         <NavItem
           icon={<ScrollText size={15} />}
           label="Run Log"
           active={view === 'runlog'}
-          onClick={() => setView('runlog')}
+          onClick={() => navTo('runlog')}
         />
       </nav>
 
@@ -71,7 +82,7 @@ export function Sidebar() {
           icon={<Settings2 size={15} />}
           label="Settings"
           active={view === 'settings'}
-          onClick={() => setView('settings')}
+          onClick={() => navTo('settings')}
         />
         <div className="flex items-center gap-2 px-3 pt-3 pb-1">
           <span className="w-1.5 h-1.5 rounded-full bg-success" />

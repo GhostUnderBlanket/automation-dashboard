@@ -1,6 +1,6 @@
 [package]
 name = "autoflow"
-version = "0.3.2"
+version = "0.4.0"
 description = "A lightweight desktop app for building and running visual automation flows"
 authors = ["GhostUnderBlanket"]
 edition = "2021"
