@@ -1,15 +1,16 @@
 {
   "$schema": "autoflow.flow",
   "version": 1,
-  "exportedAt": 1779275618075,
+  "exportedAt": 1779500000000,
   "flow": {
-    "id": "flow-1779273365546-l63r",
+    "id": "flow-1779353438078-tuwr",
     "name": "Daily Worklog · Weekdays 17:50",
-    "description": "Runs at 17:50 on weekdays. Queries PlasticSCM for today's LOB-Ticket attribute values, averages 8 hours across unique tickets, then POSTs a worklog entry for each via Polaris REST API. If no tickets found, opens Cronos for manual logging.",
+    "description": "Runs at 17:50 on weekdays. Checks if 8 h are already logged today — skips the whole flow if so. Otherwise scans today's PlasticSCM changeset comments for ticket references matching [PREFIX-123] (supports multiple per comment, e.g. [LOB-100],[LOB-200]). Averages HOURS across all unique tickets found and POSTs a worklog for each via Polaris. If no tickets found, opens Cronos for manual logging.",
     "variables": {
       "HOURS": "8",
-      "ATTRIBUTE": "LOB-Ticket",
-      "DIRECTORY": "D:\\Workspaces\\LeagueOfBomb"
+      "PREFIX": "LOB",
+      "DIRECTORY": "D:\\Workspaces\\LeagueOfBomb",
+      "UID": "1al3KuQBXWhp4TOAaUtoGPkPfjv2"
     },
     "tags": [
       "worklog",
@@ -18,13 +19,36 @@
     ],
     "nodes": [
       {
+        "id": "grp-guard",
+        "type": "group",
+        "label": "Check Today's Hours",
+        "position": { "x": -24, "y": 56 },
+        "style": { "width": 708, "height": 268 },
+        "data": {}
+      },
+      {
+        "id": "grp-scan",
+        "type": "group",
+        "label": "Find Tickets",
+        "position": { "x": -24, "y": 196 },
+        "style": { "width": 708, "height": 268 },
+        "data": {}
+      },
+      {
+        "id": "grp-submit",
+        "type": "group",
+        "label": "Submit Worklogs",
+        "position": { "x": -24, "y": 496 },
+        "style": { "width": 708, "height": 128 },
+        "data": {}
+      },
+      {
         "id": "wl-trigger",
         "type": "trigger",
         "label": "Weekdays 17:50",
-        "position": {
-          "x": 0,
-          "y": 100
-        },
+        "position": { "x": 24, "y": 44 },
+        "parentId": "grp-guard",
+        "extent": "parent",
         "data": {
           "mode": "cron",
           "cron": "50 17 * * 1-5",
@@ -33,27 +57,78 @@
         }
       },
       {
+        "id": "wl-get-date",
+        "type": "script",
+        "label": "Get today's date",
+        "position": { "x": 264, "y": 44 },
+        "parentId": "grp-guard",
+        "extent": "parent",
+        "data": {
+          "shell": "powershell",
+          "script": "Get-Date -Format \"yyyy-MM-dd\""
+        }
+      },
+      {
+        "id": "wl-check-worklog",
+        "type": "rest",
+        "label": "Check today's worklogs",
+        "position": { "x": 504, "y": 44 },
+        "parentId": "grp-guard",
+        "extent": "parent",
+        "data": {
+          "method": "POST",
+          "endpoint": "api/v1/worklogs",
+          "urlOverride": "",
+          "bodyMode": "json",
+          "body": "{\"uid\":\"${var:UID}\",\"since\":\"${prev}\",\"until\":\"${prev}\",\"limit\":100}",
+          "bodyRows": []
+        }
+      },
+      {
+        "id": "wl-parse-hours",
+        "type": "script",
+        "label": "Parse logged hours",
+        "position": { "x": 24, "y": 184 },
+        "parentId": "grp-guard",
+        "extent": "parent",
+        "data": {
+          "shell": "powershell",
+          "script": "$resp = '${wl-check-worklog}'\ntry {\n    $r = $resp | ConvertFrom-Json\n    $logged = [double]$r.result.stats.totalHours\n    if ($logged -ge 8) {\n        Write-Output \"SKIP\"\n    } else {\n        $remaining = [math]::Round(8 - $logged, 2)\n        Write-Output $remaining\n    }\n} catch {\n    Write-Output \"${var:HOURS}\"\n}"
+        }
+      },
+      {
+        "id": "wl-skip-if-logged",
+        "type": "condition",
+        "label": "Already logged 8h?",
+        "position": { "x": 264, "y": 184 },
+        "parentId": "grp-guard",
+        "extent": "parent",
+        "data": {
+          "source": "${wl-parse-hours}",
+          "op": "equals",
+          "value": "SKIP"
+        }
+      },
+      {
         "id": "wl-tickets",
         "type": "script",
-        "label": "Get tickets",
-        "position": {
-          "x": 240,
-          "y": 100
-        },
+        "label": "Get tickets from comments",
+        "position": { "x": 504, "y": 44 },
+        "parentId": "grp-scan",
+        "extent": "parent",
         "data": {
           "shell": "powershell",
           "workDir": "${var:DIRECTORY}",
-          "script": "$date = Get-Date -Format \"yyyy-MM-dd\"\n$raw = cm find attributes \"where type = '${var:ATTRIBUTE}' and date >= '$date 00:00:00' and date <= '$date 23:59:59' and owner = '$(cm whoami)'\" --format=\"{value}\" --nototal 2>&1\n$tickets = @($raw | Where-Object { $_ -match '\\S' } | Select-Object -Unique)\nif ($tickets.Count -eq 0) { Write-Output \"[]\"; exit 0 }\n$hours = [math]::Round(${var:HOURS} / $tickets.Count, 2)\n$items = $tickets | ForEach-Object { '{\"taskId\":\"' + $_ + '\",\"hours\":' + $hours + ',\"date\":\"' + $date + '\"}' }\nWrite-Output (\"[\" + ($items -join \",\") + \"]\")"
+          "script": "$date = Get-Date -Format \"yyyy-MM-dd\"\n$owner = cm whoami\n$raw = cm find changeset \"where date >= '$date 00:00:00' and date <= '$date 23:59:59' and owner = '$owner'\" --format=\"{comment}\" --nototal 2>&1\n$allComments = $raw -join \" \"\n$found = [regex]::Matches($allComments, '\\[${var:PREFIX}-\\d{1,4}\\]') | ForEach-Object { $_.Value -replace '[\\[\\]]', '' }\n$tickets = @($found | Select-Object -Unique)\nif ($tickets.Count -eq 0) { Write-Output \"[]\"; exit 0 }\n$hours = [math]::Round(${wl-parse-hours} / $tickets.Count, 2)\n$items = $tickets | ForEach-Object { '{\"taskId\":\"' + $_ + '\",\"hours\":' + $hours + ',\"date\":\"' + $date + '\"}' }\nWrite-Output (\"[\" + ($items -join \",\") + \"]\")"
         }
       },
       {
         "id": "wl-check-empty",
         "type": "condition",
         "label": "No tickets?",
-        "position": {
-          "x": 480,
-          "y": 100
-        },
+        "position": { "x": 24, "y": 184 },
+        "parentId": "grp-scan",
+        "extent": "parent",
         "data": {
           "source": "${wl-tickets}",
           "op": "equals",
@@ -61,13 +136,21 @@
         }
       },
       {
+        "id": "wl-open-cronos",
+        "type": "openurl",
+        "label": "Open Cronos",
+        "position": { "x": 480, "y": 380 },
+        "data": {
+          "url": "https://polaris.nanuq.co.th/#chronos"
+        }
+      },
+      {
         "id": "wl-loop",
         "type": "loop",
         "label": "For each ticket",
-        "position": {
-          "x": 480,
-          "y": 260
-        },
+        "position": { "x": 24, "y": 44 },
+        "parentId": "grp-submit",
+        "extent": "parent",
         "data": {
           "mode": "forEach",
           "separator": "json-array",
@@ -78,28 +161,18 @@
         "id": "wl-rest",
         "type": "rest",
         "label": "Add worklog",
-        "position": {
-          "x": 720,
-          "y": 260
-        },
+        "position": { "x": 264, "y": 44 },
+        "parentId": "grp-submit",
+        "extent": "parent",
         "data": {
           "method": "POST",
           "endpoint": "api/v1/polaris_add_worklog",
           "urlOverride": "",
           "bodyMode": "form",
           "bodyRows": [
-            {
-              "key": "taskId",
-              "value": "${loop.item.taskId}"
-            },
-            {
-              "key": "hours",
-              "value": "${loop.item.hours}"
-            },
-            {
-              "key": "date",
-              "value": "${loop.item.date}"
-            }
+            { "key": "taskId", "value": "${loop.item.taskId}" },
+            { "key": "hours",  "value": "${loop.item.hours}"  },
+            { "key": "date",   "value": "${loop.item.date}"   }
           ]
         }
       },
@@ -107,72 +180,32 @@
         "id": "wl-rest-ok",
         "type": "condition",
         "label": "Success?",
-        "position": {
-          "x": 960,
-          "y": 260
-        },
+        "position": { "x": 504, "y": 44 },
+        "parentId": "grp-submit",
+        "extent": "parent",
         "data": {
           "source": "${wl-rest.exit}",
           "op": "equals",
           "value": "0"
         }
-      },
-      {
-        "id": "wl-open-cronos",
-        "type": "openurl",
-        "label": "Open Cronos",
-        "position": {
-          "x": 960,
-          "y": 100
-        },
-        "data": {
-          "url": "https://polaris.nanuq.co.th/#chronos"
-        }
       }
     ],
     "edges": [
-      {
-        "id": "wl-e1",
-        "source": "wl-trigger",
-        "target": "wl-tickets"
-      },
-      {
-        "id": "wl-e2",
-        "source": "wl-tickets",
-        "target": "wl-check-empty"
-      },
-      {
-        "id": "wl-e3",
-        "source": "wl-check-empty",
-        "target": "wl-open-cronos",
-        "sourceHandle": "true"
-      },
-      {
-        "id": "wl-e4",
-        "source": "wl-check-empty",
-        "target": "wl-loop",
-        "sourceHandle": "false"
-      },
-      {
-        "id": "wl-e5",
-        "source": "wl-loop",
-        "target": "wl-rest"
-      },
-      {
-        "id": "wl-e6",
-        "source": "wl-rest",
-        "target": "wl-rest-ok"
-      },
-      {
-        "id": "wl-e7",
-        "source": "wl-rest-ok",
-        "target": "wl-open-cronos",
-        "sourceHandle": "true"
-      }
+      { "id": "wl-e0a", "source": "wl-trigger",       "target": "wl-get-date"      },
+      { "id": "wl-e0b", "source": "wl-get-date",      "target": "wl-check-worklog" },
+      { "id": "wl-e0c", "source": "wl-check-worklog", "target": "wl-parse-hours"   },
+      { "id": "wl-e0d", "source": "wl-parse-hours",   "target": "wl-skip-if-logged"},
+      { "id": "wl-e1",  "source": "wl-skip-if-logged","target": "wl-tickets",       "sourceHandle": "false" },
+      { "id": "wl-e2",  "source": "wl-tickets",       "target": "wl-check-empty"   },
+      { "id": "wl-e3",  "source": "wl-check-empty",   "target": "wl-open-cronos",  "sourceHandle": "true"  },
+      { "id": "wl-e4",  "source": "wl-check-empty",   "target": "wl-loop",         "sourceHandle": "false" },
+      { "id": "wl-e5",  "source": "wl-loop",          "target": "wl-rest"          },
+      { "id": "wl-e6",  "source": "wl-rest",          "target": "wl-rest-ok"       },
+      { "id": "wl-e7",  "source": "wl-rest-ok",       "target": "wl-open-cronos",  "sourceHandle": "true"  }
     ],
     "status": "success",
-    "createdAt": 1779273365546,
-    "updatedAt": 1779273365546,
-    "lastRun": 1779275555369
+    "createdAt": 1779353438078,
+    "updatedAt": 1779500000000,
+    "lastRun": 1779355371412
   }
 }

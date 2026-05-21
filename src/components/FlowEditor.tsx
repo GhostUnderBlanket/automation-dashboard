@@ -20,7 +20,7 @@ import {
   ArrowLeft, Plus, Save, Play, Square, Undo2, Redo2,
   Timer, Globe, Terminal, GitBranch, ChevronDown,
   ZoomIn, ZoomOut, Maximize2, FolderOpen, ExternalLink, Repeat2,
-  FileText, Braces, AppWindow,
+  FileText, Braces, AppWindow, Magnet, Group, Ungroup,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useFlowStore } from '../store/flowStore';
@@ -39,9 +39,18 @@ import type { FlowNode, FlowEdge, LogEntry, NodeKind } from '../types/flow';
 type NodeStatus = 'running' | 'success' | 'error';
 
 function toRFNodes(ns: FlowNode[]): Node[] {
-  return ns.map(n => ({
+  // Parent (group) nodes must precede their children in the array.
+  const sorted = [...ns].sort((a, b) => {
+    if (a.type === 'group' && b.type !== 'group') return -1;
+    if (b.type === 'group' && a.type !== 'group') return  1;
+    return 0;
+  });
+  return sorted.map(n => ({
     id: n.id, type: n.type, position: n.position,
     data: { label: n.label, ...n.data },
+    ...(n.parentId && { parentId: n.parentId }),
+    ...(n.extent   && { extent:   n.extent }),
+    ...(n.style    && { style:    n.style }),
   }));
 }
 
@@ -106,10 +115,20 @@ function toStoreNodes(ns: Node[]): FlowNode[] {
   return ns.map(n => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { label, _runStatus, ...rest } = (n.data ?? {}) as Record<string, unknown>;
-    return {
+    const stored: FlowNode = {
       id: n.id, type: (n.type ?? 'script') as NodeKind,
       label: (label ?? '') as string, position: n.position, data: rest,
     };
+    if (n.parentId)          stored.parentId = n.parentId;
+    if (n.extent === 'parent') stored.extent  = 'parent';
+    // Persist group node dimensions (updated by NodeResizer)
+    if (n.style?.width !== undefined || n.style?.height !== undefined) {
+      stored.style = {
+        width:  typeof n.style?.width  === 'number' ? n.style.width  : undefined,
+        height: typeof n.style?.height === 'number' ? n.style.height : undefined,
+      };
+    }
+    return stored;
   });
 }
 
@@ -155,13 +174,15 @@ const MAX_HIST = 50;
 interface ToolbarProps {
   flowName: string; isRunning: boolean; isDirty: boolean;
   canUndo: boolean; canRedo: boolean; hasTrigger: boolean;
+  snapEnabled: boolean; canGroup: boolean; canUngroup: boolean;
   onBack: () => void; onNameChange: (v: string) => void;
   onAddNode: (t: NodeKind) => void;
   onSave: () => void; onRun: () => void; onStop: () => void;
   onUndo: () => void; onRedo: () => void;
+  onSnapToggle: () => void; onGroup: () => void; onUngroup: () => void;
 }
 
-function Toolbar({ flowName, isRunning, isDirty, canUndo, canRedo, hasTrigger, onBack, onNameChange, onAddNode, onSave, onRun, onStop, onUndo, onRedo }: ToolbarProps) {
+function Toolbar({ flowName, isRunning, isDirty, canUndo, canRedo, hasTrigger, snapEnabled, canGroup, canUngroup, onBack, onNameChange, onAddNode, onSave, onRun, onStop, onUndo, onRedo, onSnapToggle, onGroup, onUngroup }: ToolbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -195,6 +216,35 @@ function Toolbar({ flowName, isRunning, isDirty, canUndo, canRedo, hasTrigger, o
         <button onClick={onRedo} disabled={!canRedo || isRunning} title="Redo (Ctrl+Y)"
           className="p-1.5 rounded-md text-ink-ghost hover:text-ink hover:bg-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
           <Redo2 size={13} />
+        </button>
+      </div>
+      <div className="w-px h-4 bg-wire mx-0.5" />
+
+      {/* Snap + Group controls */}
+      <div className="flex items-center gap-0.5">
+        <button
+          onClick={onSnapToggle}
+          title={snapEnabled ? 'Snap to grid: ON  (G)' : 'Snap to grid: OFF  (G)'}
+          className={clsx('p-1.5 rounded-md transition-colors',
+            snapEnabled
+              ? 'text-accent bg-accent/12 hover:bg-accent/20'
+              : 'text-ink-ghost hover:text-ink hover:bg-raised')}
+        >
+          <Magnet size={13} />
+        </button>
+        <button
+          onClick={onGroup}
+          disabled={!canGroup || isRunning}
+          title="Group selected nodes"
+          className="p-1.5 rounded-md text-ink-ghost hover:text-ink hover:bg-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+          <Group size={13} />
+        </button>
+        <button
+          onClick={onUngroup}
+          disabled={!canUngroup || isRunning}
+          title="Ungroup"
+          className="p-1.5 rounded-md text-ink-ghost hover:text-ink hover:bg-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+          <Ungroup size={13} />
         </button>
       </div>
       <div className="w-px h-4 bg-wire mx-0.5" />
@@ -387,6 +437,8 @@ export function FlowEditor() {
   const [showExitDlg,  setShowExitDlg] = useState(false);
   const [exitTarget,   setExitTarget]  = useState<'home' | 'editor' | 'settings' | 'runlog'>('home');
   const [nodeStatuses, setNodeStatuses]= useState<Map<string, NodeStatus>>(new Map());
+  const { update: updateSettings } = useSettingsStore();
+  const snapEnabled = useSettingsStore(s => s.settings.snapEnabled);
 
   // ── History ──────────────────────────────────────────────────────────────
   // All history state lives in a single ref so pushHistory / undo / redo
@@ -465,12 +517,14 @@ export function FlowEditor() {
   }
 
   // Stable refs so the keyboard handler (registered once) always calls the latest version.
-  const undoRef      = useRef(undo);
-  const redoRef      = useRef(redo);
-  const saveRef      = useRef(() => {});
-  const clipboardRef = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null);
-  undoRef.current = undo;
-  redoRef.current = redo;
+  const undoRef        = useRef(undo);
+  const redoRef        = useRef(redo);
+  const saveRef        = useRef(() => {});
+  const snapToggleRef  = useRef(() => {});
+  const clipboardRef   = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null);
+  undoRef.current     = undo;
+  redoRef.current     = redo;
+  snapToggleRef.current = () => updateSettings({ snapEnabled: !useSettingsStore.getState().settings.snapEnabled });
 
   // ── Init history ─────────────────────────────────────────────────────────
   const histInited = useRef(false);
@@ -506,6 +560,8 @@ export function FlowEditor() {
       if (mod && !e.shiftKey && e.key === 'z') { e.preventDefault(); undoRef.current(); }
       if (mod && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redoRef.current(); }
       if (mod && e.key === 's') { e.preventDefault(); saveRef.current(); }
+      // G — toggle snap to grid (no modifier, only outside inputs)
+      if (!mod && !e.shiftKey && !e.altKey && e.key === 'g') { snapToggleRef.current(); }
 
       if (mod && e.key === 'c') {
         const sel = nodesRef.current.filter(n => n.selected);
@@ -514,7 +570,22 @@ export function FlowEditor() {
         const selEdges = edgesRef.current.filter(
           edge => selIds.has(edge.source) && selIds.has(edge.target),
         );
-        clipboardRef.current = { nodes: sel, edges: selEdges };
+        // Strip group containers from clipboard; convert child positions to absolute.
+        const absNodes = sel
+          .filter(n => n.type !== 'group')
+          .map(n => {
+            if (!n.parentId) return n;
+            const parent = nodesRef.current.find(p => p.id === n.parentId);
+            return {
+              ...n,
+              parentId: undefined,
+              extent:   undefined,
+              position: parent
+                ? { x: n.position.x + parent.position.x, y: n.position.y + parent.position.y }
+                : n.position,
+            };
+          });
+        clipboardRef.current = { nodes: absNodes, edges: selEdges };
       }
 
       if (mod && e.key === 'v') {
@@ -532,6 +603,9 @@ export function FlowEditor() {
             position: { x: n.position.x + OFFSET, y: n.position.y + OFFSET },
             selected: true,
             data:     { ...n.data },
+            // Always paste as free nodes (no group parent)
+            parentId: undefined,
+            extent:   undefined,
           };
         });
         const newEdges: Edge[] = cb.edges.map((edge, i) => ({
@@ -631,6 +705,10 @@ export function FlowEditor() {
     } else if (changes.some(c => c.type === 'position' && !(c as { dragging?: boolean }).dragging)) {
       setIsDirty(true);
       pushHistoryDebounced();
+    } else if (changes.some(c => c.type === 'dimensions' && (c as { resizing?: boolean }).resizing === true)) {
+      // NodeResizer resize — only fires with resizing:true during actual user drag
+      setIsDirty(true);
+      pushHistoryDebounced();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onNodesChange]);
@@ -668,6 +746,82 @@ export function FlowEditor() {
     });
     setSelectedId(newNode.id);
     setIsDirty(true);
+  }
+
+  function handleGroup() {
+    const PAD     = 24;   // left / right / bottom
+    const PAD_TOP = 44;   // extra room at top so the group label stays visible
+    const W_DEFAULT = 200;
+    const H_DEFAULT = 80;
+    // Only group top-level, non-group nodes
+    const selected = nodes.filter(n => n.selected && n.type !== 'group' && !n.parentId);
+    if (selected.length < 2) return;
+
+    const minX = Math.min(...selected.map(n => n.position.x));
+    const minY = Math.min(...selected.map(n => n.position.y));
+    const maxX = Math.max(...selected.map(n => n.position.x + (n.measured?.width  ?? W_DEFAULT)));
+    const maxY = Math.max(...selected.map(n => n.position.y + (n.measured?.height ?? H_DEFAULT)));
+
+    const gx = minX - PAD;
+    const gy = minY - PAD_TOP;
+    const gw = maxX - minX + PAD * 2;
+    const gh = maxY - minY + PAD_TOP + PAD;
+
+    const groupId = `group-${Date.now()}`;
+    const groupNode: Node = {
+      id:       groupId,
+      type:     'group',
+      position: { x: gx, y: gy },
+      data:     { label: 'Group' },
+      style:    { width: gw, height: gh },
+      selected: true,
+    };
+
+    const childIds = new Set(selected.map(n => n.id));
+    setNodes(prev => {
+      const updated = prev.map(n => {
+        if (!childIds.has(n.id)) return { ...n, selected: false };
+        return {
+          ...n,
+          parentId: groupId,
+          extent:   'parent' as const,
+          position: { x: n.position.x - gx, y: n.position.y - gy },
+          selected: false,
+        };
+      });
+      return [groupNode, ...updated]; // group node must precede its children
+    });
+    setSelectedId(groupId);
+    setIsDirty(true);
+    setTimeout(() => pushHistory(nodesRef.current, edgesRef.current), 0);
+  }
+
+  function handleUngroup() {
+    const groupNodes = nodes.filter(n => n.selected && n.type === 'group');
+    if (groupNodes.length === 0) return;
+    const groupIds = new Set(groupNodes.map(n => n.id));
+    const groupMap = new Map(groupNodes.map(n => [n.id, n]));
+
+    setNodes(prev =>
+      prev
+        .filter(n => !groupIds.has(n.id))
+        .map(n => {
+          if (!n.parentId || !groupIds.has(n.parentId)) return n;
+          const parent = groupMap.get(n.parentId)!;
+          return {
+            ...n,
+            parentId: undefined,
+            extent:   undefined,
+            position: {
+              x: n.position.x + parent.position.x,
+              y: n.position.y + parent.position.y,
+            },
+          };
+        }),
+    );
+    setSelectedId(null);
+    setIsDirty(true);
+    setTimeout(() => pushHistory(nodesRef.current, edgesRef.current), 0);
   }
 
   function handleSave() {
@@ -726,6 +880,9 @@ export function FlowEditor() {
   }
 
   const selectedNode = nodes.find(n => n.id === selectedId);
+  const selNodes  = nodes.filter(n => n.selected);
+  const canGroup   = selNodes.filter(n => n.type !== 'group' && !n.parentId).length >= 2;
+  const canUngroup = selNodes.some(n => n.type === 'group');
 
   if (!flow) {
     return <div className="flex items-center justify-center h-full text-ink-dim text-sm font-mono">No flow selected.</div>;
@@ -737,11 +894,14 @@ export function FlowEditor() {
         flowName={flowName} isRunning={isRunning} isDirty={isDirty}
         canUndo={canUndo} canRedo={canRedo}
         hasTrigger={nodes.some(n => n.type === 'trigger')}
+        snapEnabled={snapEnabled} canGroup={canGroup} canUngroup={canUngroup}
         onBack={handleBack}
         onNameChange={v => { setFlowName(v); setIsDirty(true); }}
         onAddNode={handleAddNode}
         onSave={handleSave} onRun={handleRun} onStop={handleStop}
         onUndo={undo} onRedo={redo}
+        onSnapToggle={() => updateSettings({ snapEnabled: !snapEnabled })}
+        onGroup={handleGroup} onUngroup={handleUngroup}
       />
 
       {/* Canvas + Panel */}
@@ -755,6 +915,8 @@ export function FlowEditor() {
             onNodeClick={onNodeClick} onPaneClick={handlePaneClick}
             nodeTypes={nodeTypes} edgeTypes={EDGE_TYPES} defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
             fitView fitViewOptions={{ padding: 0.4 }} minZoom={0.3} maxZoom={2} deleteKeyCode="Backspace"
+            snapToGrid={snapEnabled} snapGrid={[20, 20]}
+            selectionOnDrag panOnDrag={[1, 2]}
           >
             <Background variant={BackgroundVariant.Dots} color={dotColor} bgColor={canvasBg} gap={22} size={1.2} />
             <CustomControls theme={theme} />

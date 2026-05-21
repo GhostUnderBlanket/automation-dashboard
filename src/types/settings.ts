@@ -7,6 +7,7 @@ export interface AppSettings {
   closeToTray:   boolean;
   theme:         'dark' | 'light';
   runLogLimit:   number;
+  snapEnabled:   boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -18,4 +19,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   closeToTray:   true,
   theme:         'dark',
   runLogLimit:   100,
+  snapEnabled:   true,
 };

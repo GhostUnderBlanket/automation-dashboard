@@ -449,7 +449,9 @@ export function runFlow(
   };
 
   void (async () => {
-    const ordered = topSort(nodes, edges);
+    // Group nodes are visual containers only — exclude from execution.
+    const execNodes = nodes.filter(n => n.type !== 'group');
+    const ordered = topSort(execNodes, edges);
     cbs.onLog(`▶  ${ordered.length} node${ordered.length !== 1 ? 's' : ''} queued`, 'info');
 
     let flowOk = true;

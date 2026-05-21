@@ -5,7 +5,10 @@ A lightweight desktop app for building and running visual automation flows — n
 ## What It Does
 
 - **Visual flow editor**: drag-and-drop node graph to wire up automation steps
-- **Node types**: Trigger (manual / cron), REST API, Script (cmd/PowerShell/bash), Condition, Loop, File, Open URL, Launch App
+- **Node types**: Trigger (manual / cron), REST API, Script (cmd/PowerShell/bash), Condition, Loop, File, Open URL, Launch App, Group (visual container)
+- **Node grouping**: select 2+ nodes → Group button creates a resizable container; children move with the group; `parentId`/`extent: 'parent'`/`style.width/height` stored on FlowNode
+- **Snap to grid**: 20 px grid for node drag and group resize; toggle with `G` key or toolbar magnet button; default ON; persisted in `settingsStore` as `snapEnabled`
+- **Box-select**: drag on empty canvas selects multiple nodes; middle/right-click drag pans
 - **Flow variables**: key-value pairs defined on each flow, referenced with `${var:NAME}` in any field
 - **Flow tags**: tag flows for filtering on the home page
 - **Flow runner**: executes nodes in topological order, streams output in a live log panel
@@ -126,18 +129,6 @@ npm run tauri build
 npx tauri icon app-icon.svg
 ```
 
-## Releasing
-
-Push a `v*` tag — GitHub Actions builds, signs, and publishes automatically:
-
-```bash
-# 1. Bump version in package.json, src-tauri/Cargo.toml, src-tauri/tauri.conf.json
-# 2. Commit, tag, push:
-git add -A && git commit -m "Release v0.x.0"
-git tag v0.x.0
-git push && git push origin v0.x.0
-```
-
 ## Flow Data Shape
 
 ```ts
@@ -237,6 +228,10 @@ type LaunchAppNodeData = {
 ## Key Constraints
 
 - **One trigger per flow** — enforced in the UI; second trigger is disabled in Add Node menu
+- **Group nodes** (`type: 'group'`): visual-only containers; executor filters them out before `topSort`; stored with `parentId`, `extent: 'parent'`, `style.width/height` on `FlowNode`; group nodes must appear before children in the nodes array; created via toolbar Group button (2+ top-level non-group nodes selected), not in Add Node menu; resize snaps to 20 px grid when snap is enabled
+- **Snap to grid**: `snapEnabled` persisted in `settingsStore` (default `true`); toggleable with `G` key or toolbar magnet button; node drag uses ReactFlow `snapToGrid`/`snapGrid`; group resize uses `onResizeEnd` in `GroupNode` to snap final dimensions
+- **Box-select**: `selectionOnDrag={true}` + `panOnDrag={[1, 2]}` on ReactFlow — left drag = box-select, middle/right drag = pan
+- **Copy/paste groups**: copying strips group containers; child positions are converted to absolute before going to clipboard; paste always produces free (ungrouped) nodes
 - **Shell scope** in `tauri.conf.json` → `plugins.shell.scope` controls which executables can run
 - **HTTP scope** in `capabilities/default.json` allows `https://**`
 - **Cron field format**: UI accepts 5-field cron; `normalize_cron()` in Rust prepends `0` seconds for 6-field `tokio-cron-scheduler`
@@ -247,7 +242,7 @@ type LaunchAppNodeData = {
 - **Insert ref picker**: `raw` inserts `${var:NAME}` (correct for numbers/booleans/form fields); `"text"` inserts `"${var:NAME}"` (quoted JSON string)
 - **Theme**: `.light` class on `<html>` overrides CSS custom properties; applied via `useEffect` in `App.tsx`
 - **Run log limit**: configurable in Settings → Run Log (default 100, range 10–500)
-- **Auto-update signing key**: public key in `tauri.conf.json` (safe to commit); private key at `~/.tauri/autoflow.key` and as GitHub Actions secrets
+- **Auto-update signing key**: public key in `tauri.conf.json` (safe to commit); private key at `~/.tauri/autoflow.key`; password in `~/.tauri/autoflow.key.password`. Releases are built locally via `release.ps1` — GitHub Actions workflow still exists but is no longer the primary release path
 - **`createUpdaterArtifacts: true`** in `tauri.conf.json` — required for updater bundle generation
 - **Workspace path** stored in `<appData>/workspace.json` (machine-local); flows in `<workspace>/flows/*.json`
 - **Launch App node**: uses a custom `launch_app` Rust command (not the shell plugin); always spawns a new detached process (`DETACHED_PROCESS` flag on Windows); fire-and-forget by default, or wait-for-exit to capture stdout/exit code downstream

@@ -47,17 +47,6 @@ npx tsc --noEmit       # type check
 npm run tauri build    # production build + installer
 ```
 
-## Releasing
-
-Push a `v*` tag — GitHub Actions builds, signs, and publishes the release automatically:
-
-```bash
-# Bump version in package.json + src-tauri/Cargo.toml + src-tauri/tauri.conf.json
-git add -A && git commit -m "Release v0.x.0"
-git tag v0.x.0
-git push && git push origin v0.x.0
-```
-
 ## Node Types
 
 | Node | Purpose |
@@ -70,6 +59,19 @@ git push && git push origin v0.x.0
 | **File** | Read / write / append / check-exists on a local file |
 | **Open URL** | Opens a URL in the default browser or a path with the default system app |
 | **Launch App** | Launches an executable with optional arguments; fire-and-forget (default) or wait-for-exit to capture stdout and exit code downstream |
+| **Group** | Visual container — select 2+ nodes and click Group; drag the container to move children together; resize with corner handles |
+
+## Canvas Controls
+
+| Action | How |
+|---|---|
+| Box-select nodes | Drag on empty canvas |
+| Pan | Middle-click drag or right-click drag |
+| Add to selection | Shift+click |
+| Group selected nodes | Toolbar **Group** button |
+| Ungroup | Select the group, click **Ungroup** |
+| Toggle snap to grid | Toolbar **⊕** button or press **G** |
+| Snap is on by default | 20 px grid; group resize also snaps |
 
 ### Interpolation
 

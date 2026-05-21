@@ -1,12 +1,18 @@
 export type FlowStatus = 'idle' | 'running' | 'success' | 'error';
-export type NodeKind  = 'trigger' | 'rest' | 'script' | 'condition' | 'file' | 'openurl' | 'loop' | 'launchapp';
+export type NodeKind  = 'trigger' | 'rest' | 'script' | 'condition' | 'file' | 'openurl' | 'loop' | 'launchapp' | 'group';
 
 export interface FlowNode {
-  id:       string;
-  type:     NodeKind;
-  label:    string;
-  position: { x: number; y: number };
-  data:     Record<string, unknown>;
+  id:        string;
+  type:      NodeKind;
+  label:     string;
+  position:  { x: number; y: number };
+  data:      Record<string, unknown>;
+  /** Set when this node lives inside a group node. */
+  parentId?: string;
+  /** Constrains node to stay within its parent bounds. */
+  extent?:   'parent';
+  /** For group nodes: pixel dimensions of the container. */
+  style?:    { width?: number; height?: number };
 }
 
 export interface FlowEdge {

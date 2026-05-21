@@ -6,6 +6,7 @@ import { FileNode }       from './FileNode';
 import { OpenUrlNode }    from './OpenUrlNode';
 import { LoopNode }       from './LoopNode';
 import { LaunchAppNode }  from './LaunchAppNode';
+import { GroupNode }      from './GroupNode';
 
 export const nodeTypes = {
   trigger:   TriggerNode,
@@ -16,4 +17,5 @@ export const nodeTypes = {
   openurl:   OpenUrlNode,
   loop:      LoopNode,
   launchapp: LaunchAppNode,
+  group:     GroupNode,
 } as const;

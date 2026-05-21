@@ -1,0 +1,177 @@
+{
+  "$schema": "autoflow.flow",
+  "version": 1,
+  "exportedAt": 1779400000000,
+  "flow": {
+    "id": "flow-git-worklog-1779400000000",
+    "name": "Daily Worklog · Weekdays 17:50 (Git)",
+    "description": "Runs at 17:50 on weekdays. Scans today's Git commit messages for ticket references matching [PREFIX-123] (supports multiple per commit, e.g. [LOB-100],[LOB-200]). Averages HOURS across all unique tickets found and POSTs a worklog for each via Polaris. If no tickets found, opens Cronos for manual logging.",
+    "variables": {
+      "HOURS": "",
+      "PREFIX": "",
+      "DIRECTORY": ""
+    },
+    "tags": [
+      "worklog",
+      "git",
+      "polaris"
+    ],
+    "nodes": [
+      {
+        "id": "wl-trigger",
+        "type": "trigger",
+        "label": "Weekdays 17:50",
+        "position": {
+          "x": 0,
+          "y": 100
+        },
+        "data": {
+          "mode": "cron",
+          "cron": "50 17 * * 1-5",
+          "catchUp": "skip",
+          "enabled": true
+        }
+      },
+      {
+        "id": "wl-tickets",
+        "type": "script",
+        "label": "Get tickets from commits",
+        "position": {
+          "x": 240,
+          "y": 100
+        },
+        "data": {
+          "shell": "powershell",
+          "workDir": "${var:DIRECTORY}",
+          "script": "$date = Get-Date -Format \"yyyy-MM-dd\"\n$author = git config user.email\n$raw = git log --since=\"$date 00:00:00\" --until=\"$date 23:59:59\" --author=\"$author\" --format=\"%s %b\" 2>&1\n$allMessages = $raw -join \" \"\n$found = [regex]::Matches($allMessages, '\\[${var:PREFIX}-\\d{1,4}\\]') | ForEach-Object { $_.Value -replace '[\\[\\]]', '' }\n$tickets = @($found | Select-Object -Unique)\nif ($tickets.Count -eq 0) { Write-Output \"[]\"; exit 0 }\n$hours = [math]::Round(${var:HOURS} / $tickets.Count, 2)\n$items = $tickets | ForEach-Object { '{\"taskId\":\"' + $_ + '\",\"hours\":' + $hours + ',\"date\":\"' + $date + '\"}' }\nWrite-Output (\"[\" + ($items -join \",\") + \"]\")"
+        }
+      },
+      {
+        "id": "wl-check-empty",
+        "type": "condition",
+        "label": "No tickets?",
+        "position": {
+          "x": 480,
+          "y": 100
+        },
+        "data": {
+          "source": "${wl-tickets}",
+          "op": "equals",
+          "value": "[]"
+        }
+      },
+      {
+        "id": "wl-loop",
+        "type": "loop",
+        "label": "For each ticket",
+        "position": {
+          "x": 480,
+          "y": 260
+        },
+        "data": {
+          "mode": "forEach",
+          "separator": "json-array",
+          "delay": 500
+        }
+      },
+      {
+        "id": "wl-rest",
+        "type": "rest",
+        "label": "Add worklog",
+        "position": {
+          "x": 720,
+          "y": 260
+        },
+        "data": {
+          "method": "POST",
+          "endpoint": "api/v1/polaris_add_worklog",
+          "urlOverride": "",
+          "bodyMode": "form",
+          "bodyRows": [
+            {
+              "key": "taskId",
+              "value": "${loop.item.taskId}"
+            },
+            {
+              "key": "hours",
+              "value": "${loop.item.hours}"
+            },
+            {
+              "key": "date",
+              "value": "${loop.item.date}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "wl-rest-ok",
+        "type": "condition",
+        "label": "Success?",
+        "position": {
+          "x": 960,
+          "y": 260
+        },
+        "data": {
+          "source": "${wl-rest.exit}",
+          "op": "equals",
+          "value": "0"
+        }
+      },
+      {
+        "id": "wl-open-cronos",
+        "type": "openurl",
+        "label": "Open Cronos",
+        "position": {
+          "x": 960,
+          "y": 100
+        },
+        "data": {
+          "url": "https://polaris.nanuq.co.th/#chronos"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "wl-e1",
+        "source": "wl-trigger",
+        "target": "wl-tickets"
+      },
+      {
+        "id": "wl-e2",
+        "source": "wl-tickets",
+        "target": "wl-check-empty"
+      },
+      {
+        "id": "wl-e3",
+        "source": "wl-check-empty",
+        "target": "wl-open-cronos",
+        "sourceHandle": "true"
+      },
+      {
+        "id": "wl-e4",
+        "source": "wl-check-empty",
+        "target": "wl-loop",
+        "sourceHandle": "false"
+      },
+      {
+        "id": "wl-e5",
+        "source": "wl-loop",
+        "target": "wl-rest"
+      },
+      {
+        "id": "wl-e6",
+        "source": "wl-rest",
+        "target": "wl-rest-ok"
+      },
+      {
+        "id": "wl-e7",
+        "source": "wl-rest-ok",
+        "target": "wl-open-cronos",
+        "sourceHandle": "true"
+      }
+    ],
+    "status": "idle",
+    "createdAt": 1779400000000,
+    "updatedAt": 1779400000000
+  }
+}
