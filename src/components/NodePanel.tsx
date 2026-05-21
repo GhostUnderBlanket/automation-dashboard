@@ -824,10 +824,9 @@ function LaunchAppFields({
   set:            (key: string, value: unknown) => void;
   flowVariables?: Record<string, string>;
 }) {
-  const program        = (data.program as string) ?? '';
-  const args           = (data.args as string) ?? '';
-  const waitForExit    = !!(data.waitForExit as boolean);
-  const focusIfRunning = !!(data.focusIfRunning as boolean);
+  const program     = (data.program as string) ?? '';
+  const args        = (data.args as string) ?? '';
+  const waitForExit = !!(data.waitForExit as boolean);
   return (
     <>
       <div>
@@ -857,20 +856,6 @@ function LaunchAppFields({
         <p className="text-[10px] text-ink-ghost mt-1.5 leading-relaxed">
           Space-separated. Use quotes around values with spaces.
           Supports <span className="font-mono">${'${prev}'}</span> and <span className="font-mono">${'${var:NAME}'}</span>.
-        </p>
-      </div>
-
-      <div>
-        <FieldLabel>Focus if Running</FieldLabel>
-        <ToggleGroup
-          value={focusIfRunning ? 'yes' : 'no'}
-          options={['no', 'yes']}
-          onChange={v => set('focusIfRunning', v === 'yes')}
-        />
-        <p className="text-[10px] text-ink-ghost mt-1.5 leading-relaxed">
-          {focusIfRunning
-            ? 'If the app is already running, its window is brought to the foreground instead of launching a new instance. Outputs "focused" or "launched".'
-            : 'Always launch a new instance regardless of whether the app is already open.'}
         </p>
       </div>
 

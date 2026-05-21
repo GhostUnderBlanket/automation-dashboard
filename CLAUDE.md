@@ -64,7 +64,7 @@ src/
       LoopNode.tsx      # Repeat / retry / forEach loop controller
       FileNode.tsx      # Read / write / append / exists on a local file
       OpenUrlNode.tsx   # Opens URL in browser or path with default app
-      LaunchAppNode.tsx # Launch executable; focus existing window if already running
+      LaunchAppNode.tsx # Launch executable with optional arguments (fire-and-forget or wait)
       BaseNode.tsx      # Shared node chrome + run-status ring
     ui/
       Select.tsx        # Dropdown select component
@@ -83,7 +83,7 @@ src/
     flowIO.ts           # Import/export bundles (single + multi-flow JSON)
     graphRefs.ts        # Upstream node resolution for ${node-id} refs
     interpolate.ts      # Interpolation engine (node refs, var:, loop.item, loop.item.field)
-    exampleFlows.ts     # 16 example flow templates; imported via welcome screen or Settings
+    exampleFlows.ts     # 19 example flow templates; importable via Settings → Workspace
     tagColor.ts         # Hash-based tag colour palette (shared across HomePage + InfoPanel)
   types/
     flow.ts             # Flow, Node, Edge TypeScript types (includes variables, tags)
@@ -213,12 +213,10 @@ type OpenUrlNodeData = {
 };
 
 type LaunchAppNodeData = {
-  label:          string;
-  program:        string;  // exe path or command name; supports interpolation
-  args?:          string;  // space-separated arguments; supports interpolation
-  waitForExit?:   boolean; // if true, wait for process to exit and capture stdout
-  focusIfRunning?: boolean; // if true, find existing window and bring to foreground instead of spawning
-                           // outputs "focused" or "launched" as stdout for downstream Condition branching
+  label:        string;
+  program:      string;  // exe path or command name; supports interpolation
+  args?:        string;  // space-separated arguments; supports interpolation
+  waitForExit?: boolean; // if true, wait for process to exit and capture stdout/exit code
 };
 ```
 
@@ -252,11 +250,12 @@ type LaunchAppNodeData = {
 - **Auto-update signing key**: public key in `tauri.conf.json` (safe to commit); private key at `~/.tauri/autoflow.key` and as GitHub Actions secrets
 - **`createUpdaterArtifacts: true`** in `tauri.conf.json` — required for updater bundle generation
 - **Workspace path** stored in `<appData>/workspace.json` (machine-local); flows in `<workspace>/flows/*.json`
-- **Launch App node**: uses a custom `launch_app` Rust command (not the shell plugin); `focusIfRunning` enumerates processes via `CreateToolhelp32Snapshot` and calls `SetForegroundWindow`; outputs `"focused"` or `"launched"` as stdout so a downstream Condition can branch on the result
+- **Launch App node**: uses a custom `launch_app` Rust command (not the shell plugin); always spawns a new detached process (`DETACHED_PROCESS` flag on Windows); fire-and-forget by default, or wait-for-exit to capture stdout/exit code downstream
 - **Launch at login**: custom `autostart_enable/disable/is_enabled` Rust commands write to `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with a properly quoted path (bypasses `tauri-plugin-autostart` which omits quotes, breaking paths with spaces)
 - **Condition node pass-through**: condition nodes store the upstream parent's stdout (not the branch string) so a Loop immediately downstream receives the correct data
-- **Welcome screen** shown on first launch (no workspace set); picks workspace directory; 19 example flows importable any time via Settings → Workspace
-- **Example flows** live in `src/lib/exampleFlows.ts`; also importable any time via Settings → Workspace
+- **Welcome screen** shown on first launch (no workspace set); picks workspace directory; example flows importable any time via Settings → Workspace
+- **Example flows** (19 total) live in `src/lib/exampleFlows.ts`; count shown in Settings is dynamic (`getExampleFlows().length`), never hardcoded
+- **DEV badge** in sidebar footer — rendered only when `import.meta.env.DEV` is true; absent in production builds
 - Tailwind v4 via `@tailwindcss/vite` (no `tailwind.config.js`)
 - `@xyflow/react` requires: `import "@xyflow/react/dist/style.css"` in `main.tsx`
 - App identifier: `io.github.ghostunderblanket.autoflow` — changing resets user app data

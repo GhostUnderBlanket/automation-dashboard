@@ -106,7 +106,7 @@ export function WelcomeScreen({ onDone }: { onDone: () => void }) {
           <div className="flex items-start gap-2 pt-1">
             <BookOpen size={13} className="text-ink-ghost mt-[1px] shrink-0" />
             <p className="text-[11.5px] text-ink-ghost leading-relaxed">
-              16 example flows covering every node type are available in{' '}
+              Example flows covering every node type are available in{' '}
               <span className="text-ink-dim">Settings → Workspace → Import example flows</span>.
             </p>
           </div>

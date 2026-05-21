@@ -38,9 +38,4 @@ cron = "0.12"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.55"
-windows-sys = { version = "0.52", features = [
-    "Win32_Foundation",
-    "Win32_System_Diagnostics_ToolHelp",
-    "Win32_UI_WindowsAndMessaging",
-] }
 

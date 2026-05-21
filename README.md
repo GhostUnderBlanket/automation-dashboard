@@ -69,7 +69,7 @@ git push && git push origin v0.x.0
 | **Loop** | Repeats a node N times, retries until exit 0, or iterates over a list (forEach) |
 | **File** | Read / write / append / check-exists on a local file |
 | **Open URL** | Opens a URL in the default browser or a path with the default system app |
-| **Launch App** | Launches an executable with optional arguments; "Focus if running" brings an existing window to the foreground instead of opening a second instance; outputs `"focused"` or `"launched"` for downstream Condition branching |
+| **Launch App** | Launches an executable with optional arguments; fire-and-forget (default) or wait-for-exit to capture stdout and exit code downstream |
 
 ### Interpolation
 

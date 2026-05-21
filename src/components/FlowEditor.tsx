@@ -138,7 +138,7 @@ const ADD_ITEMS = [
   { type: 'script'    as NodeKind, icon: <Terminal size={13} />,    label: 'Script',    color: '#f97316', defaults: { shell: 'cmd', script: '', workDir: '' }                         },
   { type: 'rest'      as NodeKind, icon: <Globe size={13} />,       label: 'REST API',  color: '#ec4899', defaults: { method: 'POST', endpoint: '', bodyMode: 'form', bodyRows: [] }  },
   { type: 'openurl'   as NodeKind, icon: <ExternalLink size={13} />,label: 'Open URL',  color: '#a78bfa', defaults: { url: '' }                                                       },
-  { type: 'launchapp' as NodeKind, icon: <AppWindow size={13} />,  label: 'Launch App',color: '#f43f5e', defaults: { program: '', args: '', waitForExit: false, focusIfRunning: false } },
+  { type: 'launchapp' as NodeKind, icon: <AppWindow size={13} />,  label: 'Launch App',color: '#f43f5e', defaults: { program: '', args: '', waitForExit: false }                      },
 ];
 
 function mkLog(message: string, level: LogEntry['level'] = 'info'): LogEntry {

@@ -291,25 +291,17 @@ const EXAMPLES: FlowTemplate[] = [
     edges: [{ id: 'la-e1', source: 'la-trig', target: 'la-launch' }],
   },
 
-  /* ── 18. Launch App — Focus if Running + Condition ── */
+  /* ── 18. Launch App — with arguments ─────────────── */
   {
-    name:        'Launch App — Focus or Launch',
-    description: 'Opens Notepad — but if it\'s already running, brings its window to the foreground instead of opening a second instance. A Condition node downstream branches on "focused" vs "launched" so you can take different actions in each case.',
-    tags:        ['example', 'launchapp', 'condition'],
-    variables:   {},
+    name:        'Launch App — Open File in Notepad',
+    description: 'Launches Notepad with a file path as an argument. Demonstrates passing arguments to an executable via the Launch App node. Change the FILE_PATH variable to open any text file.',
+    tags:        ['example', 'launchapp'],
+    variables:   { FILE_PATH: 'C:\\Users\\Public\\autoflow-demo.txt' },
     nodes: [
-      { id: 'fl-trig',    type: 'trigger',   label: 'Run',                   position: { x: 0,   y: 0   }, data: { mode: 'manual' } },
-      { id: 'fl-launch',  type: 'launchapp', label: 'Focus or Open Notepad', position: { x: 260, y: 0   }, data: { program: 'notepad.exe', args: '', waitForExit: false, focusIfRunning: true } },
-      { id: 'fl-cond',    type: 'condition', label: 'Already running?',      position: { x: 520, y: 0   }, data: { source: '${fl-launch}', op: 'equals', value: 'focused' } },
-      { id: 'fl-focused', type: 'script',    label: 'Was focused',           position: { x: 760, y: -60 }, data: { shell: 'powershell', script: 'Write-Output "Notepad was already open — brought to focus"' } },
-      { id: 'fl-new',     type: 'script',    label: 'Was launched',          position: { x: 760, y: 80  }, data: { shell: 'powershell', script: 'Write-Output "Notepad was not running — launched a new instance"' } },
+      { id: 'la2-trig',   type: 'trigger',   label: 'Run',              position: { x: 0,   y: 0 }, data: { mode: 'manual' } },
+      { id: 'la2-launch', type: 'launchapp', label: 'Open in Notepad',  position: { x: 260, y: 0 }, data: { program: 'notepad.exe', args: '${var:FILE_PATH}', waitForExit: false } },
     ],
-    edges: [
-      { id: 'fl-e1', source: 'fl-trig',   target: 'fl-launch'  },
-      { id: 'fl-e2', source: 'fl-launch', target: 'fl-cond'    },
-      { id: 'fl-e3', source: 'fl-cond',   target: 'fl-focused', sourceHandle: 'true'  },
-      { id: 'fl-e4', source: 'fl-cond',   target: 'fl-new',     sourceHandle: 'false' },
-    ],
+    edges: [{ id: 'la2-e1', source: 'la2-trig', target: 'la2-launch' }],
   },
 
   /* ── 19 (was 16). Loop: forEach JSON objects + field extraction ── */

@@ -286,8 +286,8 @@ function WorkspaceSection() {
       <div className="rounded-xl border border-wire bg-raised/40 p-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-[12.5px] font-medium text-ink">15 example flows</p>
-            <p className="text-[11.5px] text-ink-dim mt-0.5">Hello World · Cron · REST GET &amp; POST · Condition · Variables · Refs · JSON extraction · File · Open URL · Loop (repeat / retry / forEach)</p>
+            <p className="text-[12.5px] font-medium text-ink">{getExampleFlows().length} example flows</p>
+            <p className="text-[11.5px] text-ink-dim mt-0.5">Hello World · Cron · REST GET &amp; POST · Condition · Variables · Refs · JSON extraction · File · Open URL · Loop (repeat / retry / forEach) · Launch App</p>
           </div>
           <button
             onClick={importExamples}

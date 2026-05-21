@@ -87,6 +87,11 @@ export function Sidebar() {
         <div className="flex items-center gap-2 px-3 pt-3 pb-1">
           <span className="w-1.5 h-1.5 rounded-full bg-success" />
           <span className="text-[11px] text-ink-ghost font-mono tracking-wide">ready</span>
+          {import.meta.env.DEV && (
+            <span className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-mono font-bold tracking-widest bg-amber-400/20 text-amber-300 border border-amber-400/30">
+              DEV
+            </span>
+          )}
         </div>
       </div>
     </aside>

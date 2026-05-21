@@ -166,96 +166,8 @@ fn autostart_is_enabled() -> bool {
 
 // ── Launch App node (fire-and-forget process spawn + focus) ──────────────
 
-/// On Windows: find a running process by exe name, locate its visible window,
-/// restore + foreground it. Returns true if a window was found and focused.
-#[cfg(target_os = "windows")]
-fn focus_running_process(exe_name: &str) -> bool {
-    use windows_sys::Win32::{
-        Foundation::{CloseHandle, BOOL, HWND, INVALID_HANDLE_VALUE, LPARAM},
-        System::Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW,
-            PROCESSENTRY32W, TH32CS_SNAPPROCESS,
-        },
-        UI::WindowsAndMessaging::{
-            EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
-            SetForegroundWindow, ShowWindow, SW_RESTORE,
-        },
-    };
-
-    let target = exe_name.to_lowercase();
-    let target_stem = target.trim_end_matches(".exe");
-
-    // ── Step 1: find PID matching the exe name ────────────────────────────
-    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
-    if snapshot == INVALID_HANDLE_VALUE { return false; }
-
-    let mut entry: PROCESSENTRY32W = unsafe { std::mem::zeroed() };
-    entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-
-    let mut found_pid: u32 = 0;
-    unsafe {
-        if Process32FirstW(snapshot, &mut entry) != 0 {
-            loop {
-                let len = entry.szExeFile.iter().position(|&c| c == 0).unwrap_or(260);
-                let name = String::from_utf16_lossy(&entry.szExeFile[..len]).to_lowercase();
-                if name.trim_end_matches(".exe") == target_stem {
-                    found_pid = entry.th32ProcessID;
-                    break;
-                }
-                if Process32NextW(snapshot, &mut entry) == 0 { break; }
-            }
-        }
-        CloseHandle(snapshot);
-    }
-
-    if found_pid == 0 { return false; }
-
-    // ── Step 2: find visible window for that PID and focus it ─────────────
-    struct Search { pid: u32, hwnd: HWND }
-
-    unsafe extern "system" fn enum_cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
-        let s = &mut *(lparam as *mut Search);
-        let mut pid: u32 = 0;
-        GetWindowThreadProcessId(hwnd, &mut pid);
-        if pid == s.pid && IsWindowVisible(hwnd) != 0 {
-            s.hwnd = hwnd;
-            return 0; // stop enumeration
-        }
-        1
-    }
-
-    let mut search = Search { pid: found_pid, hwnd: 0 };
-    unsafe {
-        EnumWindows(Some(enum_cb), &mut search as *mut Search as LPARAM);
-        if search.hwnd != 0 {
-            ShowWindow(search.hwnd, SW_RESTORE);
-            SetForegroundWindow(search.hwnd);
-            return true;
-        }
-    }
-    false
-}
-
 #[command]
-fn launch_app(
-    program: String,
-    args: Vec<String>,
-    cwd: Option<String>,
-    focus_if_running: bool,
-) -> Result<String, String> {
-    // Try to focus an existing instance first
-    #[cfg(target_os = "windows")]
-    if focus_if_running {
-        let exe_name = std::path::Path::new(&program)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| program.clone());
-        if focus_running_process(&exe_name) {
-            return Ok("focused".to_string());
-        }
-    }
-
-    // Not running (or focus disabled) — spawn a new instance
+fn launch_app(program: String, args: Vec<String>, cwd: Option<String>) -> Result<(), String> {
     let mut cmd = Proc::new(&program);
     cmd.args(&args);
     if let Some(ref dir) = cwd {
@@ -267,7 +179,7 @@ fn launch_app(
         cmd.creation_flags(0x00000008); // DETACHED_PROCESS
     }
     cmd.spawn().map_err(|e| format!("failed to launch '{}': {}", program, e))?;
-    Ok("launched".to_string())
+    Ok(())
 }
 
 // ── Generic text file IO (used by flow import/export) ─────────────────────

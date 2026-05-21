@@ -372,10 +372,9 @@ function launchAppNode(
   id: string,
   cwd: string | undefined,
 ): SpawnHandle {
-  const program       = interp((d.program as string) ?? '').trim();
-  const argsRaw       = interp((d.args as string) ?? '').trim();
-  const waitForExit   = !!(d.waitForExit as boolean);
-  const focusIfRunning = !!(d.focusIfRunning as boolean);
+  const program     = interp((d.program as string) ?? '').trim();
+  const argsRaw     = interp((d.args as string) ?? '').trim();
+  const waitForExit = !!(d.waitForExit as boolean);
 
   // Simple arg split: respect quoted strings
   function splitArgs(s: string): string[] {
@@ -404,13 +403,9 @@ function launchAppNode(
     onLog(`   launching: ${program}${args.length ? ' ' + args.join(' ') : ''}`, 'info');
     if (!waitForExit) {
       try {
-        const outcome = await invoke<string>('launch_app', { program, args, cwd: cwd ?? null, focusIfRunning });
-        if (outcome === 'focused') {
-          onLog('   ✓ already running — brought to focus', 'success');
-        } else {
-          onLog('   ✓ launched', 'success');
-        }
-        return { exitCode: 0, stdout: outcome };
+        await invoke('launch_app', { program, args, cwd: cwd ?? null });
+        onLog('   ✓ launched', 'success');
+        return { exitCode: 0, stdout: '' };
       } catch (e) {
         onLog(`   ✗ ${String(e)}`, 'error');
         return { exitCode: 1, stdout: '' };
