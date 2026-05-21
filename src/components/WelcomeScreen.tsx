@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Zap, FolderOpen, ArrowRight, ExternalLink, Archive, Check } from 'lucide-react';
+import { Zap, FolderOpen, ArrowRight, ExternalLink, Archive, BookOpen } from 'lucide-react';
 import { clsx } from 'clsx';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { useWorkspaceStore } from '../store/workspaceStore';
-import { getExampleFlows } from '../lib/exampleFlows';
-import { saveFlowNow } from '../lib/flowPersistence';
 
 export function WelcomeScreen({ onDone }: { onDone: () => void }) {
   const { set, suggested, legacySummary, migrateLegacy } = useWorkspaceStore();
@@ -12,7 +10,6 @@ export function WelcomeScreen({ onDone }: { onDone: () => void }) {
   const [path,           setPath]          = useState('');
   const [legacy,         setLegacy]        = useState<{ flows: number; root: string } | null>(null);
   const [doMigrate,      setDoMigrate]     = useState(true);
-  const [importExamples, setImportExamples]= useState(true);
   const [busy,           setBusy]          = useState(false);
   const [error,          setError]         = useState<string | null>(null);
 
@@ -32,10 +29,6 @@ export function WelcomeScreen({ onDone }: { onDone: () => void }) {
       await set(path.trim());
       if (legacy && doMigrate) {
         try { await migrateLegacy(); } catch (e) { console.warn('[welcome] migration failed:', e); }
-      }
-      if (importExamples) {
-        const flows = getExampleFlows();
-        await Promise.all(flows.map(f => saveFlowNow(f)));
       }
     } catch (e) {
       setError(String(e));
@@ -109,24 +102,14 @@ export function WelcomeScreen({ onDone }: { onDone: () => void }) {
             Default is <span className="font-mono">Documents/Autoflow</span>. The folder will be created if it doesn't exist yet.
           </p>
 
-          {/* Import examples checkbox */}
-          <label className="flex items-center gap-2.5 pt-1 cursor-pointer select-none group">
-            <button
-              type="button"
-              onClick={() => setImportExamples(v => !v)}
-              className={clsx(
-                'w-[16px] h-[16px] rounded border flex items-center justify-center shrink-0 transition-colors',
-                importExamples
-                  ? 'bg-accent border-accent'
-                  : 'border-wire-lit bg-raised group-hover:border-accent/60',
-              )}
-            >
-              {importExamples && <Check size={10} className="text-white" strokeWidth={2.5} />}
-            </button>
-            <span className="text-[12px] text-ink-dim group-hover:text-ink transition-colors">
-              Import 16 example flows <span className="text-ink-ghost">(covers every node type — great for learning)</span>
-            </span>
-          </label>
+          {/* Examples hint */}
+          <div className="flex items-start gap-2 pt-1">
+            <BookOpen size={13} className="text-ink-ghost mt-[1px] shrink-0" />
+            <p className="text-[11.5px] text-ink-ghost leading-relaxed">
+              16 example flows covering every node type are available in{' '}
+              <span className="text-ink-dim">Settings → Workspace → Import example flows</span>.
+            </p>
+          </div>
         </div>
 
         {/* Legacy migration banner */}

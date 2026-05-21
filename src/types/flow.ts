@@ -1,5 +1,5 @@
 export type FlowStatus = 'idle' | 'running' | 'success' | 'error';
-export type NodeKind  = 'trigger' | 'rest' | 'script' | 'condition' | 'file' | 'openurl' | 'loop';
+export type NodeKind  = 'trigger' | 'rest' | 'script' | 'condition' | 'file' | 'openurl' | 'loop' | 'launchapp';
 
 export interface FlowNode {
   id:       string;

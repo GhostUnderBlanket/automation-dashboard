@@ -5,7 +5,7 @@ A lightweight desktop app for building and running visual automation flows — n
 ## What It Does
 
 - **Visual flow editor**: drag-and-drop node graph to wire up automation steps
-- **Node types**: Trigger (manual / cron), REST API, Script (cmd/PowerShell/bash), Condition, Loop, File, Open URL
+- **Node types**: Trigger (manual / cron), REST API, Script (cmd/PowerShell/bash), Condition, Loop, File, Open URL, Launch App
 - **Flow variables**: key-value pairs defined on each flow, referenced with `${var:NAME}` in any field
 - **Flow tags**: tag flows for filtering on the home page
 - **Flow runner**: executes nodes in topological order, streams output in a live log panel
@@ -64,6 +64,7 @@ src/
       LoopNode.tsx      # Repeat / retry / forEach loop controller
       FileNode.tsx      # Read / write / append / exists on a local file
       OpenUrlNode.tsx   # Opens URL in browser or path with default app
+      LaunchAppNode.tsx # Launch executable; focus existing window if already running
       BaseNode.tsx      # Shared node chrome + run-status ring
     ui/
       Select.tsx        # Dropdown select component
@@ -210,6 +211,15 @@ type OpenUrlNodeData = {
   label: string;
   url:   string;   // https:// → browser; anything else → default system app
 };
+
+type LaunchAppNodeData = {
+  label:          string;
+  program:        string;  // exe path or command name; supports interpolation
+  args?:          string;  // space-separated arguments; supports interpolation
+  waitForExit?:   boolean; // if true, wait for process to exit and capture stdout
+  focusIfRunning?: boolean; // if true, find existing window and bring to foreground instead of spawning
+                           // outputs "focused" or "launched" as stdout for downstream Condition branching
+};
 ```
 
 ## Interpolation Reference
@@ -242,7 +252,10 @@ type OpenUrlNodeData = {
 - **Auto-update signing key**: public key in `tauri.conf.json` (safe to commit); private key at `~/.tauri/autoflow.key` and as GitHub Actions secrets
 - **`createUpdaterArtifacts: true`** in `tauri.conf.json` — required for updater bundle generation
 - **Workspace path** stored in `<appData>/workspace.json` (machine-local); flows in `<workspace>/flows/*.json`
-- **Welcome screen** shown on first launch (no workspace set); step 1 picks directory, step 2 offers importing 16 example flows
+- **Launch App node**: uses a custom `launch_app` Rust command (not the shell plugin); `focusIfRunning` enumerates processes via `CreateToolhelp32Snapshot` and calls `SetForegroundWindow`; outputs `"focused"` or `"launched"` as stdout so a downstream Condition can branch on the result
+- **Launch at login**: custom `autostart_enable/disable/is_enabled` Rust commands write to `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with a properly quoted path (bypasses `tauri-plugin-autostart` which omits quotes, breaking paths with spaces)
+- **Condition node pass-through**: condition nodes store the upstream parent's stdout (not the branch string) so a Loop immediately downstream receives the correct data
+- **Welcome screen** shown on first launch (no workspace set); picks workspace directory; 19 example flows importable any time via Settings → Workspace
 - **Example flows** live in `src/lib/exampleFlows.ts`; also importable any time via Settings → Workspace
 - Tailwind v4 via `@tailwindcss/vite` (no `tailwind.config.js`)
 - `@xyflow/react` requires: `import "@xyflow/react/dist/style.css"` in `main.tsx`

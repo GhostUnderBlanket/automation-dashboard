@@ -1,0 +1,80 @@
+{
+  "$schema": "autoflow.flow",
+  "version": 1,
+  "exportedAt": 1748000000000,
+  "flow": {
+    "id": "daily-worklog",
+    "name": "Daily Worklog · Weekdays 17:50",
+    "description": "Runs at 17:50 on weekdays. Queries PlasticSCM for today's LOB-Ticket attribute values, averages 8 hours across unique tickets, then POSTs a worklog entry for each via Polaris REST API.",
+    "tags": ["worklog", "plasticscm", "polaris"],
+    "variables": {
+      "OWNER":    "chanathip.igloo@gmail.com",
+      "HOURS":    "8",
+      "ATTRIBUTE": "LOB-Ticket",
+      "DIRECTORY": "D:\\Workspaces\\LeagueOfBomb"
+    },
+    "nodes": [
+      {
+        "id": "wl-trigger",
+        "type": "trigger",
+        "label": "Weekdays 17:50",
+        "position": { "x": 0, "y": 0 },
+        "data": {
+          "label": "Weekdays 17:50",
+          "mode": "cron",
+          "cron": "50 17 * * 1-5",
+          "catchUp": "skip",
+          "enabled": true
+        }
+      },
+      {
+        "id": "wl-tickets",
+        "type": "script",
+        "label": "Get tickets",
+        "position": { "x": 240, "y": 0 },
+        "data": {
+          "label": "Get tickets",
+          "shell": "powershell",
+          "workDir": "${var:DIRECTORY}",
+          "script": "$date = Get-Date -Format \"yyyy-MM-dd\"\n$raw = cm find attributes \"where type = '${var:ATTRIBUTE}' and date >= '$date 00:00:00' and date <= '$date 23:59:59' and owner = '${var:OWNER}'\" --format=\"{value}\" --nototal 2>&1\n$tickets = @($raw | Where-Object { $_ -match '\\S' } | Select-Object -Unique)\nif ($tickets.Count -eq 0) { Write-Output \"[]\"; exit 0 }\n$hours = [math]::Round(${var:HOURS} / $tickets.Count, 2)\n$items = $tickets | ForEach-Object { '{\"taskId\":\"' + $_ + '\",\"hours\":' + $hours + ',\"date\":\"' + $date + '\"}' }\nWrite-Output (\"[\" + ($items -join \",\") + \"]\")"
+        }
+      },
+      {
+        "id": "wl-loop",
+        "type": "loop",
+        "label": "For each ticket",
+        "position": { "x": 520, "y": 0 },
+        "data": {
+          "label": "For each ticket",
+          "mode": "forEach",
+          "separator": "json-array",
+          "delay": 0
+        }
+      },
+      {
+        "id": "wl-rest",
+        "type": "rest",
+        "label": "Add worklog",
+        "position": { "x": 780, "y": 0 },
+        "data": {
+          "label": "Add worklog",
+          "method": "POST",
+          "endpoint": "api/v1/polaris_add_worklog",
+          "urlOverride": "",
+          "bodyMode": "form",
+          "bodyRows": [
+            { "key": "taskId", "value": "${loop.item.taskId}" },
+            { "key": "hours",  "value": "${loop.item.hours}"  },
+            { "key": "date",   "value": "${loop.item.date}"   }
+          ]
+        }
+      }
+    ],
+    "edges": [
+      { "id": "wl-e1", "source": "wl-trigger", "target": "wl-tickets" },
+      { "id": "wl-e2", "source": "wl-tickets", "target": "wl-loop"    },
+      { "id": "wl-e3", "source": "wl-loop",    "target": "wl-rest"    }
+    ],
+    "status": "idle"
+  }
+}

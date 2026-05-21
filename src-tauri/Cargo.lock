@@ -235,7 +235,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autoflow"
-version = "0.3.2"
+version = "0.4.3"
 dependencies = [
  "chrono",
  "cron",
@@ -255,6 +255,7 @@ dependencies = [
  "tokio",
  "tokio-cron-scheduler",
  "uuid",
+ "winreg 0.55.0",
 ]
 
 [[package]]

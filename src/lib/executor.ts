@@ -265,6 +265,10 @@ function execNode(
     return openUrlNode(d, interp, onLog);
   }
 
+  if (type === 'launchapp') {
+    return launchAppNode(d, settings, interp, onLog, id, cwd);
+  }
+
   // Script node
   const shell  = (d.shell as string) || settings.defaultShell;
   const script = interp((d.script as string) ?? '');
@@ -352,6 +356,69 @@ function openUrlNode(
     } catch (e) {
       onLog(`   ✗ ${String(e)}`, 'error');
       return { exitCode: 1, stdout: '' };
+    }
+  })();
+
+  return { result, kill: async () => {} };
+}
+
+/* ─── Launch App node ──────────────────────────────────────── */
+
+function launchAppNode(
+  d: Record<string, unknown>,
+  _settings: AppSettings,
+  interp: (s: string) => string,
+  onLog: AddLog,
+  id: string,
+  cwd: string | undefined,
+): SpawnHandle {
+  const program       = interp((d.program as string) ?? '').trim();
+  const argsRaw       = interp((d.args as string) ?? '').trim();
+  const waitForExit   = !!(d.waitForExit as boolean);
+  const focusIfRunning = !!(d.focusIfRunning as boolean);
+
+  // Simple arg split: respect quoted strings
+  function splitArgs(s: string): string[] {
+    if (!s) return [];
+    const parts: string[] = [];
+    let cur = '';
+    let inQ = false;
+    let qChar = '';
+    for (const ch of s) {
+      if (!inQ && (ch === '"' || ch === "'")) { inQ = true; qChar = ch; }
+      else if (inQ && ch === qChar) { inQ = false; qChar = ''; }
+      else if (!inQ && ch === ' ') { if (cur) { parts.push(cur); cur = ''; } }
+      else { cur += ch; }
+    }
+    if (cur) parts.push(cur);
+    return parts;
+  }
+
+  const args = splitArgs(argsRaw);
+
+  const result = (async (): Promise<{ exitCode: number | null; stdout: string }> => {
+    if (!program) {
+      onLog('   ✗ program path is empty', 'error');
+      return { exitCode: 1, stdout: '' };
+    }
+    onLog(`   launching: ${program}${args.length ? ' ' + args.join(' ') : ''}`, 'info');
+    if (!waitForExit) {
+      try {
+        const outcome = await invoke<string>('launch_app', { program, args, cwd: cwd ?? null, focusIfRunning });
+        if (outcome === 'focused') {
+          onLog('   ✓ already running — brought to focus', 'success');
+        } else {
+          onLog('   ✓ launched', 'success');
+        }
+        return { exitCode: 0, stdout: outcome };
+      } catch (e) {
+        onLog(`   ✗ ${String(e)}`, 'error');
+        return { exitCode: 1, stdout: '' };
+      }
+    } else {
+      // wait mode: reuse subprocess infrastructure for stdout capture
+      const handle = spawnSubprocess(id, program, args, cwd, onLog);
+      return handle.result;
     }
   })();
 

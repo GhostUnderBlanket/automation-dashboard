@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { X, Timer, Globe, Terminal, GitBranch, Plus, Minus, Check, AlertTriangle, Play, Loader2, FolderOpen, ExternalLink, Repeat2 } from 'lucide-react';
+import { X, Timer, Globe, Terminal, GitBranch, Plus, Minus, Check, AlertTriangle, Play, Loader2, FolderOpen, ExternalLink, Repeat2, AppWindow } from 'lucide-react';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { useSettingsStore } from '../store/settingsStore';
 import { interpolate } from '../lib/interpolate';
@@ -29,7 +29,8 @@ const CFG = {
   file:      { color: '#f59e0b', icon: <FolderOpen size={13} />,   label: 'File'      },
   script:    { color: '#f97316', icon: <Terminal size={13} />,     label: 'Script'    },
   rest:      { color: '#ec4899', icon: <Globe size={13} />,        label: 'REST API'  },
-  openurl:   { color: '#a78bfa', icon: <ExternalLink size={13} />, label: 'Open URL'  },
+  openurl:   { color: '#a78bfa', icon: <ExternalLink size={13} />, label: 'Open URL'   },
+  launchapp: { color: '#f43f5e', icon: <AppWindow size={13} />,   label: 'Launch App' },
 } as const;
 
 /* ─── Sub-components ─────────────────────────── */
@@ -813,6 +814,83 @@ function LoopFields({
   );
 }
 
+/* ─── Launch App fields ──────────────────────── */
+
+function LaunchAppFields({
+  data, upstream, set, flowVariables,
+}: {
+  data:           Record<string, unknown>;
+  upstream:       ReturnType<typeof getUpstreamNodes>;
+  set:            (key: string, value: unknown) => void;
+  flowVariables?: Record<string, string>;
+}) {
+  const program        = (data.program as string) ?? '';
+  const args           = (data.args as string) ?? '';
+  const waitForExit    = !!(data.waitForExit as boolean);
+  const focusIfRunning = !!(data.focusIfRunning as boolean);
+  return (
+    <>
+      <div>
+        <FieldLabel>Program</FieldLabel>
+        <RefField
+          value={program}
+          onChange={v => set('program', v)}
+          upstream={upstream}
+          flowVariables={flowVariables}
+          placeholder="C:\Program Files\App\app.exe"
+        />
+        <p className="text-[10px] text-ink-ghost mt-1.5 leading-relaxed">
+          Full path to the executable, or a command on <span className="font-mono">PATH</span>.
+          Supports <span className="font-mono">${'${var:NAME}'}</span> interpolation.
+        </p>
+      </div>
+
+      <div>
+        <FieldLabel>Arguments <span className="normal-case text-ink-ghost">(optional)</span></FieldLabel>
+        <RefField
+          value={args}
+          onChange={v => set('args', v)}
+          upstream={upstream}
+          flowVariables={flowVariables}
+          placeholder="--flag value ${prev}"
+        />
+        <p className="text-[10px] text-ink-ghost mt-1.5 leading-relaxed">
+          Space-separated. Use quotes around values with spaces.
+          Supports <span className="font-mono">${'${prev}'}</span> and <span className="font-mono">${'${var:NAME}'}</span>.
+        </p>
+      </div>
+
+      <div>
+        <FieldLabel>Focus if Running</FieldLabel>
+        <ToggleGroup
+          value={focusIfRunning ? 'yes' : 'no'}
+          options={['no', 'yes']}
+          onChange={v => set('focusIfRunning', v === 'yes')}
+        />
+        <p className="text-[10px] text-ink-ghost mt-1.5 leading-relaxed">
+          {focusIfRunning
+            ? 'If the app is already running, its window is brought to the foreground instead of launching a new instance. Outputs "focused" or "launched".'
+            : 'Always launch a new instance regardless of whether the app is already open.'}
+        </p>
+      </div>
+
+      <div>
+        <FieldLabel>Wait for Exit</FieldLabel>
+        <ToggleGroup
+          value={waitForExit ? 'yes' : 'no'}
+          options={['no', 'yes']}
+          onChange={v => set('waitForExit', v === 'yes')}
+        />
+        <p className="text-[10px] text-ink-ghost mt-1.5 leading-relaxed">
+          {waitForExit
+            ? 'Flow waits for the app to close. Exit code and stdout are available downstream.'
+            : 'Fire-and-forget — the app launches and the flow continues immediately.'}
+        </p>
+      </div>
+    </>
+  );
+}
+
 /* ─── NodePanel ──────────────────────────────── */
 
 export function NodePanel({ node, nodes, edges, onUpdate, onClose, flowVariables }: NodePanelProps) {
@@ -968,6 +1046,11 @@ export function NodePanel({ node, nodes, edges, onUpdate, onClose, flowVariables
         {/* ── Loop ──────────────────────────── */}
         {type === 'loop' && (
           <LoopFields data={data} upstream={upstream} set={set} flowVariables={flowVariables} />
+        )}
+
+        {/* ── Launch App ────────────────────── */}
+        {type === 'launchapp' && (
+          <LaunchAppFields data={data} upstream={upstream} set={set} flowVariables={flowVariables} />
         )}
 
       </div>

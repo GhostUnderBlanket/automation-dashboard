@@ -278,7 +278,41 @@ const EXAMPLES: FlowTemplate[] = [
     ],
   },
 
-  /* ── 16. Loop: forEach JSON objects + field extraction ── */
+  /* ── 17. Launch App — Basic ──────────────────────── */
+  {
+    name:        'Launch App — Open Notepad',
+    description: 'Opens Notepad when the flow runs. The Launch App node launches any executable on PATH or by full path — no shell script needed. Change the program path to open any app.',
+    tags:        ['example', 'launchapp'],
+    variables:   {},
+    nodes: [
+      { id: 'la-trig',   type: 'trigger',   label: 'Run',         position: { x: 0,   y: 0 }, data: { mode: 'manual' } },
+      { id: 'la-launch', type: 'launchapp', label: 'Open Notepad', position: { x: 260, y: 0 }, data: { program: 'notepad.exe', args: '', waitForExit: false, focusIfRunning: false } },
+    ],
+    edges: [{ id: 'la-e1', source: 'la-trig', target: 'la-launch' }],
+  },
+
+  /* ── 18. Launch App — Focus if Running + Condition ── */
+  {
+    name:        'Launch App — Focus or Launch',
+    description: 'Opens Notepad — but if it\'s already running, brings its window to the foreground instead of opening a second instance. A Condition node downstream branches on "focused" vs "launched" so you can take different actions in each case.',
+    tags:        ['example', 'launchapp', 'condition'],
+    variables:   {},
+    nodes: [
+      { id: 'fl-trig',    type: 'trigger',   label: 'Run',                   position: { x: 0,   y: 0   }, data: { mode: 'manual' } },
+      { id: 'fl-launch',  type: 'launchapp', label: 'Focus or Open Notepad', position: { x: 260, y: 0   }, data: { program: 'notepad.exe', args: '', waitForExit: false, focusIfRunning: true } },
+      { id: 'fl-cond',    type: 'condition', label: 'Already running?',      position: { x: 520, y: 0   }, data: { source: '${fl-launch}', op: 'equals', value: 'focused' } },
+      { id: 'fl-focused', type: 'script',    label: 'Was focused',           position: { x: 760, y: -60 }, data: { shell: 'powershell', script: 'Write-Output "Notepad was already open — brought to focus"' } },
+      { id: 'fl-new',     type: 'script',    label: 'Was launched',          position: { x: 760, y: 80  }, data: { shell: 'powershell', script: 'Write-Output "Notepad was not running — launched a new instance"' } },
+    ],
+    edges: [
+      { id: 'fl-e1', source: 'fl-trig',   target: 'fl-launch'  },
+      { id: 'fl-e2', source: 'fl-launch', target: 'fl-cond'    },
+      { id: 'fl-e3', source: 'fl-cond',   target: 'fl-focused', sourceHandle: 'true'  },
+      { id: 'fl-e4', source: 'fl-cond',   target: 'fl-new',     sourceHandle: 'false' },
+    ],
+  },
+
+  /* ── 19 (was 16). Loop: forEach JSON objects + field extraction ── */
   {
     name:        'Loop — forEach JSON Objects (${loop.item.field})',
     description: 'A script emits a JSON array of objects. The Loop iterates and the REST body uses ${loop.item.title} and ${loop.item.userId} to extract individual fields — no manual JSON parsing needed. Uses the free JSONPlaceholder API.',

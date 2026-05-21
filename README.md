@@ -10,7 +10,7 @@ A lightweight desktop app for building and running visual automation flows — n
 ## What It Does
 
 - **Visual flow editor** — drag-and-drop node graph to wire up automation steps
-- **Node types** — Trigger, REST API, Script, Condition, Loop, File, Open URL
+- **Node types** — Trigger, REST API, Script, Condition, Loop, File, Open URL, Launch App
 - **Flow variables** — define key-value pairs on the flow and reference them with `${var:NAME}` in any node field
 - **Flow tags** — tag flows for filtering and organisation
 - **Flow runner** — executes nodes in topological order, streams output in a live log panel
@@ -69,6 +69,7 @@ git push && git push origin v0.x.0
 | **Loop** | Repeats a node N times, retries until exit 0, or iterates over a list (forEach) |
 | **File** | Read / write / append / check-exists on a local file |
 | **Open URL** | Opens a URL in the default browser or a path with the default system app |
+| **Launch App** | Launches an executable with optional arguments; "Focus if running" brings an existing window to the foreground instead of opening a second instance; outputs `"focused"` or `"launched"` for downstream Condition branching |
 
 ### Interpolation
 

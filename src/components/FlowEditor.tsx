@@ -20,7 +20,7 @@ import {
   ArrowLeft, Plus, Save, Play, Square, Undo2, Redo2,
   Timer, Globe, Terminal, GitBranch, ChevronDown,
   ZoomIn, ZoomOut, Maximize2, FolderOpen, ExternalLink, Repeat2,
-  FileText, Braces,
+  FileText, Braces, AppWindow,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useFlowStore } from '../store/flowStore';
@@ -138,6 +138,7 @@ const ADD_ITEMS = [
   { type: 'script'    as NodeKind, icon: <Terminal size={13} />,    label: 'Script',    color: '#f97316', defaults: { shell: 'cmd', script: '', workDir: '' }                         },
   { type: 'rest'      as NodeKind, icon: <Globe size={13} />,       label: 'REST API',  color: '#ec4899', defaults: { method: 'POST', endpoint: '', bodyMode: 'form', bodyRows: [] }  },
   { type: 'openurl'   as NodeKind, icon: <ExternalLink size={13} />,label: 'Open URL',  color: '#a78bfa', defaults: { url: '' }                                                       },
+  { type: 'launchapp' as NodeKind, icon: <AppWindow size={13} />,  label: 'Launch App',color: '#f43f5e', defaults: { program: '', args: '', waitForExit: false, focusIfRunning: false } },
 ];
 
 function mkLog(message: string, level: LogEntry['level'] = 'info'): LogEntry {
@@ -209,7 +210,7 @@ function Toolbar({ flowName, isRunning, isDirty, canUndo, canRedo, hasTrigger, o
           <ChevronDown size={11} className={clsx('transition-transform', menuOpen && 'rotate-180')} />
         </button>
         {menuOpen && (
-          <div className="absolute right-0 top-full mt-1.5 w-[176px] bg-surface border border-wire rounded-xl overflow-hidden shadow-xl shadow-black/50 z-50" style={{ animation: 'fade-up 0.15s ease both' }}>
+          <div className="absolute right-0 top-full mt-1.5 w-[200px] bg-surface border border-wire rounded-xl overflow-hidden shadow-xl shadow-black/50 z-50" style={{ animation: 'fade-up 0.15s ease both' }}>
             {ADD_ITEMS.map(item => {
               const disabled = item.type === 'trigger' && hasTrigger;
               return (

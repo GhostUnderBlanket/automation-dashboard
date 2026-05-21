@@ -34,7 +34,7 @@ export function Sidebar() {
   const requestNav   = useFlowStore(s => s.requestNav);
 
   function navTo(target: 'home' | 'runlog' | 'settings') {
-    if (view === 'editor' && editorDirty && target !== 'settings') {
+    if (view === 'editor' && editorDirty) {
       requestNav(target);
     } else {
       setView(target);
