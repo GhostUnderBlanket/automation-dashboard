@@ -116,9 +116,10 @@ Write-Ok "src-tauri/tauri.conf.json"
 
 Write-Step "Building Autoflow $Version (release profile - this takes a few minutes)"
 
-$env:TAURI_SIGNING_PRIVATE_KEY_PATH     = $keyFile
+# Tauri CLI reads TAURI_SIGNING_PRIVATE_KEY as the file *content* (not a path).
+$env:TAURI_SIGNING_PRIVATE_KEY          = (Get-Content $keyFile -Raw).Trim()
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $keyPassword
-Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY_PATH -ErrorAction SilentlyContinue
 
 Set-Location $root
 npm run tauri build
