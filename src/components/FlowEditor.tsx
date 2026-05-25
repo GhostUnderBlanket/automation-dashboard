@@ -21,7 +21,7 @@ import {
   Timer, Globe, Terminal, GitBranch, ChevronDown,
   ZoomIn, ZoomOut, Maximize2, FolderOpen, ExternalLink, Repeat2,
   FileText, Braces, AppWindow, Magnet, Group, Ungroup,
-  Hourglass, Workflow,
+  Hourglass, Workflow, Bell, Cpu,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useFlowStore } from '../store/flowStore';
@@ -35,6 +35,7 @@ import { NodePanel } from './NodePanel';
 import { LogPanel } from './LogPanel';
 import { FlowVarsPanel } from './FlowVarsPanel';
 import { InfoPanel } from './InfoPanel';
+import { NodePalette } from './NodePalette';
 import type { FlowNode, FlowEdge, LogEntry, NodeKind } from '../types/flow';
 
 /* ─── Helpers ────────────────────────────────── */
@@ -163,6 +164,8 @@ const ADD_ITEMS = [
   { type: 'launchapp' as NodeKind, icon: <AppWindow size={13} />,  label: 'Launch App',color: '#f43f5e', defaults: { program: '', args: '', waitForExit: false }                      },
   { type: 'delay'     as NodeKind, icon: <Hourglass size={13} />,  label: 'Delay',     color: '#14b8a6', defaults: { ms: 1000 }                                                        },
   { type: 'subflow'   as NodeKind, icon: <Workflow size={13} />,   label: 'Sub-flow',  color: '#818cf8', defaults: { flowId: '', flowName: '' }                                        },
+  { type: 'notify'    as NodeKind, icon: <Bell size={13} />,       label: 'Notify',    color: '#eab308', defaults: { title: '', body: '' }                                              },
+  { type: 'envvar'    as NodeKind, icon: <Cpu size={13} />,        label: 'Env Var',   color: '#22d3ee', defaults: { op: 'get', name: '', value: '' }                                  },
 ];
 
 function mkLog(message: string, level: LogEntry['level'] = 'info'): LogEntry {
@@ -438,6 +441,7 @@ export function FlowEditor() {
   const [logOpen,      setLogOpen]     = useState(false);
   const [logs,         setLogs]        = useState<LogEntry[]>([]);
   const [isRunning,    setIsRunning]   = useState(false);
+  const [paletteOpen,  setPaletteOpen] = useState(false);
   const [isDirty,      setIsDirty]     = useState(false);
   const [showExitDlg,  setShowExitDlg] = useState(false);
   const [exitTarget,   setExitTarget]  = useState<'home' | 'editor' | 'settings' | 'runlog'>('home');
@@ -526,10 +530,12 @@ export function FlowEditor() {
   const redoRef        = useRef(redo);
   const saveRef        = useRef(() => {});
   const snapToggleRef  = useRef(() => {});
+  const paletteRef     = useRef(() => {});
   const clipboardRef   = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null);
   undoRef.current     = undo;
   redoRef.current     = redo;
   snapToggleRef.current = () => updateSettings({ snapEnabled: !useSettingsStore.getState().settings.snapEnabled });
+  paletteRef.current    = () => setPaletteOpen(v => !v);
 
   // ── Init history ─────────────────────────────────────────────────────────
   const histInited = useRef(false);
@@ -565,6 +571,7 @@ export function FlowEditor() {
       if (mod && !e.shiftKey && e.key === 'z') { e.preventDefault(); undoRef.current(); }
       if (mod && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redoRef.current(); }
       if (mod && e.key === 's') { e.preventDefault(); saveRef.current(); }
+      if (mod && e.key === 'k') { e.preventDefault(); paletteRef.current(); }
       // G — toggle snap to grid (no modifier, only outside inputs)
       if (!mod && !e.shiftKey && !e.altKey && e.key === 'g') { snapToggleRef.current(); }
 
@@ -953,7 +960,9 @@ export function FlowEditor() {
           </ReactFlow>
           {nodes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <p className="text-[12px] font-mono text-ink-ghost">Click <span className="text-ink-dim">+ Add Node</span> to start building</p>
+              <p className="text-[12px] font-mono text-ink-ghost">
+                Click <span className="text-ink-dim">+ Add Node</span> or press <kbd className="font-mono bg-raised border border-wire rounded px-1 text-ink-dim">Ctrl+K</kbd> to start building
+              </p>
             </div>
           )}
         </div>
@@ -983,6 +992,16 @@ export function FlowEditor() {
       </div>
 
       <LogPanel open={logOpen} onToggle={() => setLogOpen(v => !v)} logs={logs} onClear={() => setLogs([])} />
+
+      <NodePalette
+        open={paletteOpen}
+        items={ADD_ITEMS.map(item => ({
+          ...item,
+          disabled: item.type === 'trigger' && nodes.some(n => n.type === 'trigger'),
+        }))}
+        onSelect={type => { handleAddNode(type); }}
+        onClose={() => setPaletteOpen(false)}
+      />
 
       {showExitDlg && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 backdrop-blur-[2px]">

@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { readTextFile, writeTextFile, exists as fsExists } from '@tauri-apps/plugin-fs';
 import { openUrl, openPath } from '@tauri-apps/plugin-opener';
+import { sendNotification } from '@tauri-apps/plugin-notification';
 import type { Node, Edge } from '@xyflow/react';
 import type { AppSettings } from '../types/settings';
 import type { LogEntry } from '../types/flow';
@@ -282,6 +283,14 @@ function execNode(
     return subflowNode(d, settings, variables, secrets, onLog, upstream, callStack);
   }
 
+  if (type === 'notify') {
+    return notifyNode(d, interp, onLog);
+  }
+
+  if (type === 'envvar') {
+    return envVarNode(d, interp, onLog);
+  }
+
   // Script node
   const shell  = (d.shell as string) || settings.defaultShell;
   const script = interp((d.script as string) ?? '');
@@ -532,6 +541,66 @@ function subflowNode(
   });
 
   return { result, kill: async () => { if (stopFn) await stopFn(); } };
+}
+
+/* ─── Notify node ────────────────────────────────────────────── */
+
+function notifyNode(
+  d: Record<string, unknown>,
+  interp: (s: string) => string,
+  onLog: AddLog,
+): SpawnHandle {
+  const title = interp((d.title as string) ?? '').trim() || 'Autoflow';
+  const body  = interp((d.body  as string) ?? '').trim();
+
+  const result = (async (): Promise<{ exitCode: number | null; stdout: string }> => {
+    try {
+      onLog(`   🔔 ${title}${body ? `: ${body.slice(0, 80)}` : ''}`, 'info');
+      await sendNotification({ title, body });
+      onLog('   ✓ notification sent', 'success');
+      return { exitCode: 0, stdout: title };
+    } catch (e) {
+      onLog(`   ✗ ${String(e)}`, 'error');
+      return { exitCode: 1, stdout: '' };
+    }
+  })();
+
+  return { result, kill: async () => {} };
+}
+
+/* ─── Env Var node ───────────────────────────────────────────── */
+
+function envVarNode(
+  d: Record<string, unknown>,
+  interp: (s: string) => string,
+  onLog: AddLog,
+): SpawnHandle {
+  const op    = (d.op as string) || 'get';
+  const name  = interp((d.name  as string) ?? '').trim();
+  const value = interp((d.value as string) ?? '');
+
+  const result = (async (): Promise<{ exitCode: number | null; stdout: string }> => {
+    if (!name) {
+      onLog('   ✗ variable name is empty', 'error');
+      return { exitCode: 1, stdout: '' };
+    }
+    try {
+      if (op === 'get') {
+        const val = await invoke<string>('get_env_var', { name });
+        onLog(`   $${name} = ${val !== '' ? val : '(not set)'}`, 'info');
+        return { exitCode: 0, stdout: val };
+      } else {
+        await invoke('set_env_var', { name, value });
+        onLog(`   $${name} ← ${value}`, 'success');
+        return { exitCode: 0, stdout: value };
+      }
+    } catch (e) {
+      onLog(`   ✗ ${String(e)}`, 'error');
+      return { exitCode: 1, stdout: '' };
+    }
+  })();
+
+  return { result, kill: async () => {} };
 }
 
 /* ─── Public API ────────────────────────────────────────────── */

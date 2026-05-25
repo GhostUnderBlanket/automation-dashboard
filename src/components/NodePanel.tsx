@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from 'react';
-import { X, Timer, Globe, Terminal, GitBranch, Plus, Minus, Check, AlertTriangle, Play, Loader2, FolderOpen, ExternalLink, Repeat2, AppWindow, Hourglass, Workflow, Send } from 'lucide-react';
+import { X, Timer, Globe, Terminal, GitBranch, Plus, Minus, Check, AlertTriangle, Play, Loader2, FolderOpen, ExternalLink, Repeat2, AppWindow, Hourglass, Workflow, Send, Bell, Cpu } from 'lucide-react';
 import { useFlowStore } from '../store/flowStore';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { useSettingsStore } from '../store/settingsStore';
@@ -36,6 +36,8 @@ const CFG = {
   launchapp: { color: '#f43f5e', icon: <AppWindow size={13} />,   label: 'Launch App' },
   delay:     { color: '#14b8a6', icon: <Hourglass size={13} />,   label: 'Delay'      },
   subflow:   { color: '#818cf8', icon: <Workflow size={13} />,     label: 'Sub-flow'   },
+  notify:    { color: '#eab308', icon: <Bell size={13} />,         label: 'Notify'     },
+  envvar:    { color: '#22d3ee', icon: <Cpu size={13} />,          label: 'Env Var'    },
 } as const;
 
 /* ─── Sub-components ─────────────────────────── */
@@ -920,6 +922,111 @@ function WebhookTestButton({ port, path }: { port: number; path: string }) {
   );
 }
 
+/* ─── Notify fields ──────────────────────────── */
+
+function NotifyFields({
+  data, upstream, set, flowVariables,
+}: {
+  data:           Record<string, unknown>;
+  upstream:       ReturnType<typeof getUpstreamNodes>;
+  set:            (key: string, value: unknown) => void;
+  flowVariables?: Record<string, string>;
+}) {
+  const title = (data.title as string) ?? '';
+  const body  = (data.body  as string) ?? '';
+  return (
+    <>
+      <div>
+        <FieldLabel>Title</FieldLabel>
+        <RefField
+          value={title}
+          onChange={v => set('title', v)}
+          upstream={upstream}
+          flowVariables={flowVariables}
+          placeholder="Autoflow"
+        />
+        <p className="text-[10px] text-ink-ghost mt-1.5 leading-relaxed">
+          The notification title. Supports <span className="font-mono">${'${prev}'}</span> and <span className="font-mono">${'${var:NAME}'}</span>.
+        </p>
+      </div>
+      <div>
+        <FieldLabel>Body <span className="normal-case text-ink-ghost">(optional)</span></FieldLabel>
+        <RefField
+          value={body}
+          onChange={v => set('body', v)}
+          upstream={upstream}
+          flowVariables={flowVariables}
+          placeholder="Run complete"
+        />
+      </div>
+      <div className="rounded-md bg-raised/50 border border-wire/60 p-2.5">
+        <p className="text-[10px] text-ink-ghost leading-relaxed">
+          Sends an OS desktop notification. The title is also available as <span className="font-mono text-ink-dim">${'${prev}'}</span> downstream.
+        </p>
+      </div>
+    </>
+  );
+}
+
+/* ─── Env Var fields ─────────────────────────── */
+
+function EnvVarFields({
+  data, upstream, set, flowVariables,
+}: {
+  data:           Record<string, unknown>;
+  upstream:       ReturnType<typeof getUpstreamNodes>;
+  set:            (key: string, value: unknown) => void;
+  flowVariables?: Record<string, string>;
+}) {
+  const op    = (data.op    as string) || 'get';
+  const name  = (data.name  as string) ?? '';
+  const value = (data.value as string) ?? '';
+  return (
+    <>
+      <div>
+        <FieldLabel>Operation</FieldLabel>
+        <ToggleGroup
+          value={op as 'get' | 'set'}
+          options={['get', 'set']}
+          onChange={v => set('op', v)}
+        />
+        <p className="text-[10px] text-ink-ghost mt-1.5 leading-relaxed">
+          {op === 'get'
+            ? 'Read an environment variable; its value becomes stdout.'
+            : 'Write an environment variable so child processes inherit it.'}
+        </p>
+      </div>
+
+      <div>
+        <FieldLabel>Variable Name</FieldLabel>
+        <RefField
+          value={name}
+          onChange={v => set('name', v)}
+          upstream={upstream}
+          flowVariables={flowVariables}
+          placeholder="MY_VAR"
+        />
+        <p className="text-[10px] text-ink-ghost mt-1.5 leading-relaxed">
+          Case-sensitive. Also accessible via <span className="font-mono">${'${env.MY_VAR}'}</span> in any node.
+        </p>
+      </div>
+
+      {op === 'set' && (
+        <div>
+          <FieldLabel>Value</FieldLabel>
+          <RefField
+            value={value}
+            onChange={v => set('value', v)}
+            upstream={upstream}
+            flowVariables={flowVariables}
+            placeholder="hello"
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ─── Sub-flow fields ────────────────────────── */
 
 function SubflowFields({
@@ -1212,6 +1319,16 @@ export function NodePanel({ node, nodes, edges, onUpdate, onClose, flowVariables
         {/* ── Sub-flow ──────────────────────── */}
         {type === 'subflow' && (
           <SubflowFields data={data} nodeId={safeNode.id} onUpdate={onUpdate} currentFlowId={flowId} />
+        )}
+
+        {/* ── Notify ────────────────────────── */}
+        {type === 'notify' && (
+          <NotifyFields data={data} upstream={upstream} set={set} flowVariables={flowVariables} />
+        )}
+
+        {/* ── Env Var ───────────────────────── */}
+        {type === 'envvar' && (
+          <EnvVarFields data={data} upstream={upstream} set={set} flowVariables={flowVariables} />
         )}
 
       </div>

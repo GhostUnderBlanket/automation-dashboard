@@ -394,7 +394,41 @@ const EXAMPLES: FlowTemplate[] = [
     ],
   },
 
-  /* ── 22. Sub-flow — compose two flows ────────── */
+  /* ── 22. Notify — desktop notification mid-flow ─ */
+  {
+    name:        'Notify — Desktop Alert',
+    description: 'Shows how to send a desktop notification as a mid-flow step. The script produces a result, then the Notify node pops an OS toast with that value in the body.',
+    tags:        ['example', 'notify'],
+    variables:   {},
+    nodes: [
+      { id: 'nf-trig',   type: 'trigger', label: 'Run',           position: { x: 0,   y: 0 }, data: { mode: 'manual' } },
+      { id: 'nf-script', type: 'script',  label: 'Get timestamp', position: { x: 240, y: 0 }, data: { shell: 'powershell', script: 'Get-Date -Format "HH:mm:ss"' } },
+      { id: 'nf-notify', type: 'notify',  label: 'Alert',         position: { x: 480, y: 0 }, data: { title: 'Autoflow', body: 'Flow ran at ${prev}' } },
+    ],
+    edges: [
+      { id: 'nf-e1', source: 'nf-trig',   target: 'nf-script' },
+      { id: 'nf-e2', source: 'nf-script', target: 'nf-notify' },
+    ],
+  },
+
+  /* ── 23. Env Var — read and set environment variables ─ */
+  {
+    name:        'Env Var — Read & Write',
+    description: 'Demonstrates the Env Var node. Sets MY_GREETING to a value, then a Script node reads it via ${env.MY_GREETING} and prints it.',
+    tags:        ['example', 'env-var'],
+    variables:   {},
+    nodes: [
+      { id: 'ev-trig',   type: 'trigger', label: 'Run',            position: { x: 0,   y: 0 }, data: { mode: 'manual' } },
+      { id: 'ev-set',    type: 'envvar',  label: 'Set greeting',   position: { x: 240, y: 0 }, data: { op: 'set', name: 'MY_GREETING', value: 'Hello from Autoflow!' } },
+      { id: 'ev-script', type: 'script',  label: 'Read greeting',  position: { x: 480, y: 0 }, data: { shell: 'powershell', script: 'Write-Output $env:MY_GREETING' } },
+    ],
+    edges: [
+      { id: 'ev-e1', source: 'ev-trig',   target: 'ev-set'    },
+      { id: 'ev-e2', source: 'ev-set',    target: 'ev-script' },
+    ],
+  },
+
+  /* ── 25. Sub-flow — compose two flows ────────── */
   {
     name:        'Sub-flow — Health Check',
     description: 'Demonstrates the Sub-flow node. This flow fetches a URL and passes the response to a sub-flow for processing. Import this alongside another flow and select it in the Sub-flow node panel.',

@@ -5,9 +5,12 @@ A lightweight desktop app for building and running visual automation flows — n
 ## What It Does
 
 - **Visual flow editor**: drag-and-drop node graph to wire up automation steps
-- **Node types**: Trigger (manual / cron / watch / webhook), REST API, Script (cmd/PowerShell/bash), Condition, Loop, File, Open URL, Launch App, Delay, Sub-flow, Group (visual container)
+- **Node types**: Trigger (manual / cron / watch / webhook), REST API, Script (cmd/PowerShell/bash), Condition, Loop, File, Open URL, Launch App, Delay, Sub-flow, Notify, Env Var, Group (visual container)
 - **Delay node**: pauses the flow for N ms; accepts `${var:NAME}`; passes upstream stdout through unchanged
 - **Sub-flow node**: runs another flow inline; upstream stdout passed as `${var:INPUT}`; leaf output becomes stdout
+- **Notify node**: sends an OS desktop notification mid-flow; `title` + `body` fields; both support interpolation; stdout = title; color `#eab308`
+- **Env Var node**: `get` reads a process env var → stdout; `set` writes a process env var so child processes inherit it; name + value support interpolation; color `#22d3ee`
+- **Node search palette**: `Ctrl+K` opens a floating search palette to add nodes by name; keyboard navigation with ↑↓ and Enter
 - **Watch trigger**: Rust `notify` crate watches a file/directory; fires `file-watch-fire` event on **create/modify only** (delete is ignored so downstream File nodes can read safely); changed file path available as `${prev}`
 - **Webhook trigger**: Rust `tokio` TCP listener on a local port; fires `webhook-fire` event; request body available as `${prev}` downstream
 - **Secret store**: global key-value pairs in `secretsStore` (localStorage `autoflow-secrets`); referenced with `${secret:NAME}`; masked to `***` in run logs; never included in flow exports; managed in Settings → Secrets
@@ -257,6 +260,9 @@ type SubflowNodeData = {
 - **One trigger per flow** — enforced in the UI; second trigger is disabled in Add Node menu
 - **Delay node** (`type: 'delay'`): single `ms` field (accepts `${var:NAME}`); passes upstream stdout through unchanged; killable mid-sleep; color `#14b8a6`
 - **Sub-flow node** (`type: 'subflow'`): `flowId` + `flowName` fields; upstream stdout injected as `${var:INPUT}` in sub-flow; leaf node output becomes this node's stdout; cycle detection via `callStack: Set<string>` threaded through `runFlow`/`execNode`; self-reference filtered from the flow picker in NodePanel
+- **Notify node** (`type: 'notify'`): `title` + `body` fields; calls `sendNotification` from `@tauri-apps/plugin-notification`; stdout = title; both fields support full interpolation; color `#eab308`
+- **Env Var node** (`type: 'envvar'`): `op: 'get'|'set'`, `name`, `value` fields; `get` invokes `get_env_var` Rust command → stdout; `set` invokes `set_env_var` Rust command (uses `std::env::set_var` so child processes inherit it); color `#22d3ee`
+- **Node search palette**: `Ctrl+K` opens `NodePalette.tsx` (floating modal); search filters ADD_ITEMS by label/type; keyboard nav with ↑↓, Enter to add, Esc to close; trigger disabled when one already exists; paletteRef pattern for stale-closure-safe toggle
 - **Watch trigger** (`mode: 'watch'`): fires on **create/modify only** — delete events are ignored so downstream File nodes can read safely; watches parent directory (more reliable on Windows); auto-creates parent dir if missing; strips surrounding quotes from the path; changed file path becomes the trigger node's stdout (`${prev}`); `notify = "6"` crate in Cargo.toml
 - **Webhook trigger** (`mode: 'webhook'`): Rust `tokio::net::TcpListener` on `127.0.0.1:{port}`; handles OPTIONS preflight with CORS headers so browser `fetch` works; reads full body via Content-Length loop; only fires flow on POST/GET (not OPTIONS); request body becomes trigger stdout; `WebhookMap: Arc<Mutex<HashMap<String, JoinHandle<()>>>>` in Rust state
 - **Secret store**: `useSecretsStore` (Zustand, localStorage `autoflow-secrets`); `${secret:NAME}` resolved in `interpolate.ts`; all log output masked via `origOnLog` wrapper in `runFlow`; never included in flow exports; RefField shows secrets section in picker with lock icon chips; Settings → Secrets section

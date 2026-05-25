@@ -903,6 +903,23 @@ async fn webhook_reload(
     Ok(())
 }
 
+// ── Environment variable access ────────────────────────────────────────────
+
+#[command]
+fn get_env_var(name: String) -> String {
+    std::env::var(&name).unwrap_or_default()
+}
+
+/// Sets an environment variable on the Autoflow process so child processes
+/// spawned after this call will inherit the new value.
+#[command]
+fn set_env_var(name: String, value: String) {
+    // Safety: single-threaded Tauri command context; child processes
+    // are spawned after this returns so they see the updated env.
+    #[allow(deprecated)]
+    unsafe { std::env::set_var(&name, &value); }
+}
+
 // ── Tray + close-to-tray ──────────────────────────────────────────────────
 
 pub struct CloseToTray(pub AtomicBool);
@@ -1047,6 +1064,8 @@ pub fn run() {
             launch_app,
             watch_reload,
             webhook_reload,
+            get_env_var,
+            set_env_var,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
