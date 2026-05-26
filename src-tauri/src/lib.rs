@@ -939,6 +939,13 @@ fn show_main_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Returns true if the app was launched with --minimized (autostart hidden in tray).
+/// The frontend calls this once on mount and skips show_main_window when true.
+#[command]
+fn was_launched_minimized() -> bool {
+    std::env::args().any(|a| a == "--minimized")
+}
+
 // ── App entry ──────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1014,14 +1021,10 @@ pub fn run() {
                 })
                 .build(&handle)?;
 
-            // Window starts hidden (visible: false in tauri.conf.json) to prevent
-            // a flash on --minimized launches. Show it now unless this is an
-            // autostart launch with "start minimized" enabled.
-            if !std::env::args().any(|a| a == "--minimized") {
-                if let Some(w) = app.get_webview_window("main") {
-                    let _ = w.show();
-                }
-            }
+            // Window starts hidden (visible: false in tauri.conf.json).
+            // The frontend calls show_main_window after React has rendered so the
+            // window never appears blank. For --minimized launches the frontend
+            // skips that call and the window stays in the tray.
 
             Ok(())
         })
@@ -1057,6 +1060,7 @@ pub fn run() {
             scheduler_get_state,
             set_close_to_tray,
             show_main_window,
+            was_launched_minimized,
             autostart_enable,
             autostart_disable,
             autostart_is_enabled,

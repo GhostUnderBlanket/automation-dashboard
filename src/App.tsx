@@ -28,6 +28,15 @@ export default function App() {
   const closeToTray = useSettingsStore((s) => s.settings.closeToTray);
   const theme       = useSettingsStore((s) => s.settings.theme);
 
+  // Show the main window once React has rendered its first frame.
+  // The window starts hidden (visible:false in tauri.conf.json) so it never
+  // appears blank. For --minimized autostart launches we stay hidden in tray.
+  useEffect(() => {
+    invoke<boolean>('was_launched_minimized')
+      .then(minimized => { if (!minimized) invoke('show_main_window').catch(() => {}); })
+      .catch(() => { invoke('show_main_window').catch(() => {}); }); // fallback: always show
+  }, []);
+
   // 1) Read the workspace marker at launch. 2) Once we have a workspace,
   // load flows from disk.
   useEffect(() => { void wsRefresh(); }, [wsRefresh]);
